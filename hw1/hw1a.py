@@ -33,7 +33,7 @@ class EOSClassifier:
         # We've made an array below to help you consider meaningful
         # components of a sentence, for this task.
         # Make sure to use them!
-        id, word_m3, word_m2, word_m1, period, word_p1, word_p2, word_3, left_reliable, right_reliable, num_spaces = array
+        id, word_m3, word_m2, word_m1, period, word_p1, word_p2, word_p3, left_reliable, right_reliable, num_spaces = array
 
         # The "features" array holds a list of
         # values that should act as predictors.
@@ -58,8 +58,26 @@ class EOSClassifier:
             # We've given you some features you might want to experiment with below.
             # You should be able to quickly get a score above 0.95!
 
-            # len(word_m1),
-            # 1 if word_p1.isupper() else 0
+            len(word_m3),
+            len(word_m2),
+            len(word_m1),
+            len(word_p1),
+            len(word_p2),
+            len(word_p3),
+
+            1 if word_m1.lower() in self.sentence_internal else 0,
+            1 if word_p1.lower() in self.sentence_internal else 0,
+
+            1 if word_p1.isupper() else 0,
+            1 if word_m1.isupper() else 0,
+
+            1 if word_p1.isalpha() else 0,
+            1 if word_m1.isalpha() else 0,
+
+            1 if word_m1.lower() in self.titles else 0,
+            1 if word_p1.lower() in self.unlikely_proper_nouns else 0,
+
+            1 if '.' in word_m1 else 0,
         ]
 
         return features
