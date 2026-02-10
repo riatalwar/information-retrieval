@@ -1,6 +1,11 @@
 import argparse
 
+# Models tested (decided on RandomForestClassifier)
+from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report
 
 
@@ -21,7 +26,7 @@ class EOSClassifier:
         # focus on building good features.
         # Don't start experimenting with other models until you are confident
         # you have reached the scoring upper bound.
-        self.clf = DecisionTreeClassifier()  # TODO: experiment with different models
+        self.clf = RandomForestClassifier()  # Selected RandomForestClassifier after some experimentation
         X = [self.extract_features(x) for x in trainX]
         self.clf.fit(X, trainY)
 
@@ -41,22 +46,14 @@ class EOSClassifier:
         # For example, our 4th feature has a value of 1 if word_m1 is an abbreviation,
         # and 0 if not.
 
-        features = [  # TODO: add features here
-            left_reliable,
-            right_reliable,
-            num_spaces,
-            1 if word_m1 in self.abbrevs else 0
+        features = [
+            float(left_reliable),   # was having issues with other classifier models not accepting these features, so used AI to debug and figure out they needed to be converted to numeric values
+            float(right_reliable),
+            int(num_spaces),
+            1 if word_m1.lower() in self.abbrevs else 0,
 
-            # ==========TODO==========
-            # Make a note of the score you'll get with
-            # only the features above (it should be around
-            # 0.9). Use this as your baseline.
-            # Now, experiment with adding your features.
-            # What is a sign that period marks the end of a
-            # sentence?
-            # Hint: Simpler features will get you further than complex ones, at first.
-            # We've given you some features you might want to experiment with below.
-            # You should be able to quickly get a score above 0.95!
+            # ==========CUSTOM FEATURES==========
+            # See writeup_a.txt for a discussion of these features
 
             len(word_m3),
             len(word_m2),
@@ -70,6 +67,8 @@ class EOSClassifier:
 
             1 if word_p1.isupper() else 0,
             1 if word_m1.isupper() else 0,
+            1 if word_p1[0].isupper() else 0,
+            1 if word_m1[0].isupper() else 0,
 
             1 if word_p1.isalpha() else 0,
             1 if word_m1.isalpha() else 0,
