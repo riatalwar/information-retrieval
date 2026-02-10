@@ -14,4 +14,4 @@ Below I have ranked the performance of the six models I tried, based on their re
 #5 GaussianNB (0.9804)
 #6 KNeighborsClassifier (0.9353)
 
-Interestingly, the Random Forest classifier model follows a similar concept to the Decision Tree model, as it effectively aims to build an optimized decision tree. I tested a couple different combinations of features, and I consistently found that the random forest performed the best out of all the models.
+Interestingly, the Random Forest classifier model follows a similar concept to the Decision Tree model, as it effectively aims to build an optimized set of decision trees. By using multiple trees to evaluate the input, the random forest generates more accurate and generalizable results. Of course, this comes with additional computational cost and time, but it generated a solid boost in the performance. I tested a couple different combinations of features, and I consistently found that the random forest performed the best out of all the models.
