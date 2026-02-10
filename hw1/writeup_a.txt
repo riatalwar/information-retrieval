@@ -1,0 +1,17 @@
+**Features**
+One existing feature that I modified was the abbreviation check, because I noticed that some abbreviations (e.g. Feb for February) were capitalized in the actual text while being lowercase in the abbreviation list. I also experiemented with adding the length and uppercase checks for the word after and before the period, respectively.
+For additional features, I added a check for if a common title came before the period, which typically indicates it is not EOS. I also checked if a period is in the previous word (e.g. U.S, U.N, p.m) because that often indicates it is part of an acronym. Another useful feature was if the word after the period is an unlikely proper noun or not, as proper nouns often show up in the middle of the sentence, while capitalized non-proper nouns typically indicate the start of a new sentence
+These features combined got me to about 98.5% accuracy with the original DecisionTreeClassifier setup.
+To push the accuracy up a little further I used word length for all surrounding word which can give hints about sentence structure. I also used the words on either side of the period to check if they were common internal words, which typically means that the period would not be EOS. I also checked if the entire word or just the first letter was capitalized on either side of the period, which may differentiate between acronyms, new sentences, or proper nouns. Similar to the check for a period in the previous word, I check the words on both sides to see if they were fully alphabetical or contained numeric/special characters. These additions pushed me closed to 99.5% accuracy on the dataset.
+
+**Models**
+Below I have ranked the performance of the six models I tried, based on their respective default parameters and the same set of features.
+
+#1 RandomForestClassifier (0.9984)
+#2 MLPClassifier (0.9971)
+#3 DecisionTreeClassifier (0.9964)
+#4 AdaBoostClassifier (0.9946)
+#5 GaussianNB (0.9804)
+#6 KNeighborsClassifier (0.9353)
+
+Interestingly, the Random Forest classifier model follows a similar concept to the Decision Tree model, as it effectively aims to build an optimized decision tree. I tested a couple different combinations of features, and I consistently found that the random forest performed the best out of all the models.
