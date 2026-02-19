@@ -1,0 +1,24 @@
+Features
+What didn't work well: length of whitespace at beginning, - for list items
+
+Good features:
+Counts:
+Number of alphabetical only words and number of numeric only words
+Check for notable symbols such as @, ", \, /, |, _
+Look at comma counts, also checking how many follow numbers versus letters
+
+Recognizable patterns:
+Numeric list items
+Phone numbers
+Emails
+> or : to indicate quoted
+
+Metadata:
+Previous line prediction
+Relative doc positioning (percentage of way through the doc)
+
+Other useful information:
+Count large blocks of spaces
+Average word length
+Distance between first alphabetical character and first non-whitespace character
+Character distribution: percentage of alphabetical characters in first vs second half of text
