@@ -1,24 +1,50 @@
 Features
-What didn't work well: length of whitespace at beginning, - for list items
+What didn't work well:
+  - Length of whitespace at beginning
+  - "-" for list items
+These features, though I thought they might be useful for recognizing non-plaintext or list segments, did not end up being particularly helpful.
 
 Good features:
 Counts:
-Number of alphabetical only words and number of numeric only words
-Check for notable symbols such as @, ", \, /, |, _
-Look at comma counts, also checking how many follow numbers versus letters
+  - Number of alphabetical only words and number of numeric only words
+  - Check for notable symbols such as @, ", \, /, |, _
+  - Look at comma counts, also checking how many follow numbers versus letters
+This category of features is useful for identifying notable characters or word formats associated with the various categories. High counts of alphabetical-only words is indicative of plaintext, while numeric "words" are more likely to belong to things like tables or perhaps signatures. Some symbols are commonly associated with signatures or graphics and the counts can be used to distinguish them from plaintext. Lastly, comma counts are indicative of plaintext patterns when sparsely used after alphabetical words, but are more likely to indicate tables when following numbers or used as a different kind of separator when used frequently.
 
 Recognizable patterns:
-Numeric list items
-Phone numbers
-Emails
-> or : to indicate quoted
+  - Numeric list items
+  - Phone numbers
+  - Emails
+  - ">" or ":" to indicate quoted
+Certain recognizable patterns are highly useful for identifying quoted segments, as the > or : are strong predictors. Numeric list items are harder to pick out, but there are several different common formats that we can account for. Phone numbers and emails are also commonly used in signatures, and sometimes headers, so recognizing the most common formats of those is an informative feature.
 
 Metadata:
-Previous line prediction
-Relative doc positioning (percentage of way through the doc)
+  - Previous line prediction
+  - Relative doc positioning (percentage of way through the doc)
+I modified some of the original structure of the code to provide the relative positioning of each line within the document (detecting new documents based on the standard email header). This helps to identify whether a line is likely to be in certain categories, as headers are typically at the top, signatures at the bottom, and plaintext somewhere in the middle. In addition, I used the previous line prediction as another feature because lines typically come in groups. This is an interesting feature, as it is also possible for incorrect predictions to exacerbate errors, but it led to an overall improvement in accuracy.
 
 Other useful information:
-Count large blocks of spaces
-Average word length
-Distance between first alphabetical character and first non-whitespace character
-Character distribution: percentage of alphabetical characters in first vs second half of text
+  - Count large blocks of spaces
+  - Average word length
+  - Distance between first alphabetical character and first non-whitespace character
+  - Character distribution: percentage of alphabetical characters in first vs second half of text
+These final characteristics are helpful primarily for identifying graphics, as many spaces, short words, long periods without alphabetical characters, and uneven character distribution are often indicative of graphics. To a certain extent, these features can also apply to signatures and tables, further differentiating them from plaintext, which typically has a fairly even space and character distribution.
+
+
+Models
+I decided to just run some similar performance tests to Part A, obtaining the following results:
+
+#1 RandomForestClassifier (0.9668)
+#2 MLPClassifier (0.9571)
+#3 KNeighborsClassifier (0.8393)
+#4 AdaBoostClassifier (0.7770)
+#5 DecisionTreeClassifier (0.7507)
+#6 GaussianNB (0.6205)
+
+*Note that the above results are for line classification only.
+
+Regardless of model, it was much harder to get close to the performance of the model from Part A. This is due to the relative complexity of this assignment, but I still managed to obtain strong results using the same RandomForestClassifier model. Despite the additional complexity, the models had similar relative performance, though they did worse overall on average. One particularly notable change is that there was a dramatic drop between the #2 and #3 ranked models of over 11% accuracy, compared to a drop of 0.1%. The strong distinction clearly places the random forest and multilayer perceptron models above the others, with the random forest once again just slightly ahead.
+
+
+AI Usage
+I used AI to generate the code and regex patterns for the features, but I came up with the features without the use of AI. Additionally, I wrote the code for the modifications needed to include the prediction and line position metadata without the use of AI except for some minor debugging. I completed the writeup without use of AI.
