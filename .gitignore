@@ -1,5 +1,9 @@
+.DS_store
 */__pycache__
 */data
 */sent.*
 */classes
 */segment.*
+*/*.raw
+hw2/query.rels
+hw2/common_words
