@@ -128,11 +128,53 @@ def compute_tf(doc: Document, doc_freqs: Dict[str, int], weights: list):
         vec[word] += weights.abstract
     return dict(vec)  # convert back to a regular dict
 
-def compute_tfidf(doc, doc_freqs, weights):
-    return {}  # TODO: implement
+def compute_tfidf(doc: Document, doc_freqs: Dict[str, int], weights: list):
+    '''
+    Computes the tf-idf vector for a document.
 
-def compute_boolean(doc, doc_freqs, weights):
-    return {}  # TODO: implement
+    Uses log-normalized term frequency: (1 + log10(tf)) * log10(N / df),
+    N : total number of documents
+    df : document frequency of each term
+
+    Args:
+        doc: The document to score.
+        doc_freqs: A mapping from term to document frequency across the corpus.
+        weights: Field weights passed through to compute_tf.
+
+    Returns:
+        A dict mapping each term to its tf-idf score.
+    '''
+    tf_computed = compute_tf(doc, doc_freqs, weights)   # get document term frequencies
+    tfidf_computed = dict()
+
+    # compute tf-idf for each term
+    for word, tf in tf_computed:
+        if tf == 0: continue    # don't bother storing term frequencies of 0 (sparsity)
+        tfidf_computed[word] = (1 + np.log10(tf)) * np.log10(len(doc_freqs) / doc_freqs[word])
+
+    return tfidf_computed
+
+def compute_boolean(doc: Document, doc_freqs: Dict[str, int], weights: list):
+    '''
+    Computes a sparse boolean term vector for a document.
+
+    Args:
+        doc: The document to score.
+        doc_freqs: A mapping from term to document frequency across the corpus.
+        weights: Field weights passed through to compute_tf.
+
+    Returns:
+        A dict mapping each present term to 1.
+    '''
+    tf_computed = compute_tf(doc, doc_freqs, weights)
+    bool_computed = dict()
+
+    # store all terms with nonzero frequencies
+    for word, tf in tf_computed:
+        if tf == 0: continue    # don't bother storing term frequencies of 0
+        bool_computed[word] = 1
+
+    return bool_computed
 
 
 
