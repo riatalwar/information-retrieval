@@ -224,10 +224,37 @@ def precision_at(recall: float, results: List[int], relevant: List[int]) -> floa
 
     Note that there is implicitly a point (recall=0, precision=1).
 
-    `results` is a sorted list of document ids
+    `results` is an ordered list of document ids sorted by rank
     `relevant` is a list of relevant documents
     '''
-    return 1  # TODO: implement
+    relevant_set = set(relevant)
+    points = [(0, 1)]  # implicit 100% precision if no docs are returned
+    if recall == 0: return 1
+    num_relevant_found = 0
+
+    # go through the document ranking to tally the relevant doc count at each level of returned docs
+    for k, doc_id in enumerate(results, start=1):
+        if doc_id in relevant_set:
+            num_relevant_found += 1
+            r = num_relevant_found / len(relevant)
+            p = num_relevant_found / k
+            points.append((r, p))
+
+    points.sort() # sort points on recall level for search
+
+    # locate either
+    # a. pts on either side of desired recall level
+    # b. exact recall
+    i = 1
+    prev_pt = points[0]
+    while points[i][0] < recall:
+        prev_pt = points[i]
+        i += 1
+
+    # return exact precision or fall back to interpolation
+    if points[i][0] == recall: return points[i][1]
+
+    return interpolate(prev_pt[0], prev_pt[1], points[i][0], points[i][1], recall)
 
 def mean_precision1(results, relevant):
     return (precision_at(0.25, results, relevant) +
