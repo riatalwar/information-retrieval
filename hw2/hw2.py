@@ -148,8 +148,8 @@ def compute_tfidf(doc: Document, doc_freqs: Dict[str, int], weights: list):
     tfidf_computed = dict()
 
     # compute tf-idf for each term
-    for word, tf in tf_computed:
-        if tf == 0: continue    # don't bother storing term frequencies of 0 (sparsity)
+    for word, tf in tf_computed.items():
+        if tf == 0 or doc_freqs.get(word, 0) == 0: continue
         tfidf_computed[word] = (1 + np.log10(tf)) * np.log10(len(doc_freqs) / doc_freqs[word])
 
     return tfidf_computed
@@ -170,7 +170,7 @@ def compute_boolean(doc: Document, doc_freqs: Dict[str, int], weights: list):
     bool_computed = dict()
 
     # store all terms with nonzero frequencies
-    for word, tf in tf_computed:
+    for word, tf in tf_computed.items():
         if tf == 0: continue    # don't bother storing term frequencies of 0
         bool_computed[word] = 1
 
