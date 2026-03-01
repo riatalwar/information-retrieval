@@ -262,13 +262,39 @@ def mean_precision1(results, relevant):
         precision_at(0.75, results, relevant)) / 3
 
 def mean_precision2(results, relevant):
-    return 0  # TODO: implement
+    sum = 0
+    for i in range(10):
+        sum += precision_at((i + 1) / 10, results, relevant)
+    return sum / 10
 
 def norm_recall(results, relevant):
-    return 0  # TODO: implement
+    rel = len(relevant)
+    n = len(results)
+
+    # sum ranks of relevant documents
+    sum_rank = 0
+    for i in range(rel):
+        sum_rank += results.index(relevant[i])
+
+    sum_i = rel * (rel + 1) / 2
+    denom = rel * (n - rel)
+    
+    return 1 - (sum_rank - sum_i) / denom
 
 def norm_precision(results, relevant):
-    return 0  # TODO: implement
+    rel = len(relevant)
+    n = len(results)
+
+    # normalized sum of ranks
+    sum_rank = 0
+    sum_i = 0
+    for i in range(rel):
+        sum_rank += np.log10(results.index(relevant[i]) + 1)
+        sum_i += np.log10(i + 1)
+        
+    denom = n * np.log10(n) - (n - rel) * np.log10(n - rel) - rel * np.log10(rel) # approximate
+
+    return 1 - (sum_rank - sum_i) / denom
 
 
 ### Extensions
