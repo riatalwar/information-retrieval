@@ -196,14 +196,37 @@ def cosine_sim(x, y):
         return 0
     return num / (norm(list(x.values())) * norm(list(y.values())))
 
-def dice_sim(x, y):
-    return 0  # TODO: implement
+def dice_sim(x: Dict[str, float], y: Dict[str, float]):
+    '''
+    Computes the dice similarity between two sparse term vectors represented as dictionaries.
+    '''
+    num = 2 * dictdot(x, y)
+    if num == 0:
+        return 0
+    denom = sum(x.values()) + sum(y.values())
+    return num / denom
 
 def jaccard_sim(x, y):
-    return 0  # TODO: implement
+    '''
+    Computes the jaccard similarity between two sparse term vectors represented as dictionaries.
+    '''
+    num = dictdot(x, y)
+    denom = sum(x.values()) + sum(y.values()) - num
+
+    if num == 0 or denom == 0:
+        return 0
+
+    return num / denom
 
 def overlap_sim(x, y):
-    return 0  # TODO: implement
+    '''
+    Computes the overlap similarity between two sparse term vectors represented as dictionaries.
+    '''
+    num = dictdot(x, y)
+    if num == 0:
+        return 0
+    denom = min(sum(x.values()), sum(y.values()))
+    return num / denom
 
 
 ### Precision/Recall
