@@ -8,6 +8,10 @@ from numpy.linalg import norm
 from nltk.stem.snowball import SnowballStemmer
 from nltk.tokenize import word_tokenize
 
+# autograder fix
+import nltk
+nltk.download('punkt_tab')
+
 
 ### File IO and processing
 
