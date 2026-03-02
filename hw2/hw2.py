@@ -424,6 +424,189 @@ def search_debug(docs, query, relevant, doc_vectors, query_vec, sim):
         print(docs[doc_id - 1])
         print()
 
+# AI-Generated helper functions to extract data
+def query_top20_table(i: int, term='tfidf', sim='cosine', stem=True, removestop=True,
+                      term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1)) -> str:
+    '''
+    Returns a markdown table of the top 20 retrieved documents for the i-th query.
+
+    Args:
+        i: 1-based query index.
+        term: Term weighting scheme ('tf', 'tfidf', 'boolean').
+        sim: Similarity function ('cosine', 'jaccard', 'dice', 'overlap').
+        stem: Whether to stem tokens.
+        removestop: Whether to remove stopwords.
+        term_weights: Field weights for term scoring.
+    '''
+    term_funcs = {'tf': compute_tf, 'tfidf': compute_tfidf, 'boolean': compute_boolean}
+    sim_funcs = {'cosine': cosine_sim, 'jaccard': jaccard_sim, 'dice': dice_sim, 'overlap': overlap_sim}
+
+    docs = read_docs('cacm.raw')
+    queries = read_docs('query.raw')
+    rels = read_rels('query.rels')
+    stopwords = read_stopwords('common_words')
+
+    processed_docs, processed_queries = process_docs_and_queries(docs, queries, stem, removestop, stopwords)
+    doc_freqs = compute_doc_freqs(processed_docs)
+    doc_vectors = [term_funcs[term](doc, doc_freqs, term_weights) for doc in processed_docs]
+
+    query = processed_queries[i - 1]
+    query_vec = term_funcs[term](query, doc_freqs, term_weights)
+    relevant = set(rels.get(query.doc_id, []))
+
+    results_with_score = [(doc_id + 1, sim_funcs[sim](query_vec, doc_vec))
+                          for doc_id, doc_vec in enumerate(doc_vectors)]
+    results_with_score = sorted(results_with_score, key=lambda x: -x[1])[:20]
+
+    lines = ['| Rank | Doc # | Title | Similarity |',
+             '|------|-------|-------|------------|']
+    for rank, (doc_id, score) in enumerate(results_with_score, start=1):
+        title = ' '.join(docs[doc_id - 1].title) or '(no title)'
+        if doc_id in relevant:
+            title = f'**{title}**'
+        lines.append(f'| {rank} | {doc_id} | {title} | {score:.4f} |')
+
+    return '\n'.join(lines)
+
+
+def query_top10_overlap(i: int, term='tfidf', sim='cosine', stem=True, removestop=True,
+                        term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1)) -> str:
+    '''
+    Returns a markdown bullet list of overlapping terms (nonzero weight in both the query
+    and document vectors) for each of the top 10 retrieved documents for the i-th query.
+
+    Args:
+        i: 1-based query index.
+        term: Term weighting scheme ('tf', 'tfidf', 'boolean').
+        sim: Similarity function ('cosine', 'jaccard', 'dice', 'overlap').
+        stem: Whether to stem tokens.
+        removestop: Whether to remove stopwords.
+        term_weights: Field weights for term scoring.
+    '''
+    term_funcs = {'tf': compute_tf, 'tfidf': compute_tfidf, 'boolean': compute_boolean}
+    sim_funcs = {'cosine': cosine_sim, 'jaccard': jaccard_sim, 'dice': dice_sim, 'overlap': overlap_sim}
+
+    docs = read_docs('cacm.raw')
+    queries = read_docs('query.raw')
+    stopwords = read_stopwords('common_words')
+
+    processed_docs, processed_queries = process_docs_and_queries(docs, queries, stem, removestop, stopwords)
+    doc_freqs = compute_doc_freqs(processed_docs)
+    doc_vectors = [term_funcs[term](doc, doc_freqs, term_weights) for doc in processed_docs]
+
+    query = processed_queries[i - 1]
+    query_vec = term_funcs[term](query, doc_freqs, term_weights)
+    query_terms = set(query_vec.keys())
+
+    results_with_score = [(doc_id + 1, sim_funcs[sim](query_vec, doc_vec), doc_vec)
+                          for doc_id, doc_vec in enumerate(doc_vectors)]
+    results_with_score = sorted(results_with_score, key=lambda x: -x[1])[:10]
+
+    lines = []
+    for rank, (doc_id, score, doc_vec) in enumerate(results_with_score, start=1):
+        title = ' '.join(docs[doc_id - 1].title) or '(no title)'
+        overlap = sorted(query_terms & set(doc_vec.keys()))
+        lines.append(f'- **Rank {rank} — Doc {doc_id}** _{title}_')
+        if overlap:
+            for term in overlap:
+                lines.append(f'  - {term} (query: {query_vec[term]:.4f}, doc: {doc_vec[term]:.4f})')
+        else:
+            lines.append('  - (none)')
+
+    return '\n'.join(lines)
+
+
+def relevant_in_top20_table(query_ids: List[int]) -> str:
+    '''
+    For every configuration (term weighting x stem x removestop x similarity x term weights),
+    counts the number of relevant documents retrieved in the top 20 results, averaged across
+    the given queries. Returns a markdown table sorted by avg relevant descending.
+
+    Args:
+        query_ids: 1-based list of query indices to evaluate.
+    '''
+    docs = read_docs('cacm.raw')
+    queries = read_docs('query.raw')
+    rels = read_rels('query.rels')
+    stopwords = read_stopwords('common_words')
+
+    term_funcs = {'tf': compute_tf, 'tfidf': compute_tfidf, 'boolean': compute_boolean}
+    sim_funcs = {'cosine': cosine_sim, 'jaccard': jaccard_sim, 'dice': dice_sim, 'overlap': overlap_sim}
+
+    permutations = [
+        term_funcs,
+        [False, True],   # stem
+        [False, True],   # removestop
+        sim_funcs,
+        [TermWeights(author=1, title=1, keyword=1, abstract=1),
+         TermWeights(author=1, title=3, keyword=4, abstract=1),
+         TermWeights(author=1, title=1, keyword=1, abstract=4)]
+    ]
+
+    rows = []
+    for term, stem, removestop, sim, term_weights in itertools.product(*permutations):
+        processed_docs, processed_queries = process_docs_and_queries(docs, queries, stem, removestop, stopwords)
+        doc_freqs = compute_doc_freqs(processed_docs)
+        doc_vectors = [term_funcs[term](doc, doc_freqs, term_weights) for doc in processed_docs]
+
+        counts = []
+        for i in query_ids:
+            query = processed_queries[i - 1]
+            query_vec = term_funcs[term](query, doc_freqs, term_weights)
+            results = search(doc_vectors, query_vec, sim_funcs[sim])
+            relevant = set(rels[query.doc_id])
+            counts.append(sum(1 for doc_id in results[:20] if doc_id in relevant))
+
+        rows.append((term, stem, removestop, sim, ','.join(map(str, term_weights)), np.mean(counts)))
+
+    rows.sort(key=lambda r: -r[5])
+
+    lines = ['| Term | Stem | Remove Stopwords | Similarity | Term Weights | Avg Relevant in Top 20 |',
+             '|------|------|------------------|------------|--------------|------------------------|']
+    for term, stem, removestop, sim, weights, avg in rows:
+        lines.append(f'| {term} | {stem} | {removestop} | {sim} | {weights} | {avg:.4f} |')
+
+    return '\n'.join(lines)
+
+
+def doc_top20_table(i: int, term='tfidf', sim='cosine', stem=True, removestop=True,
+                    term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1)) -> str:
+    '''
+    Returns a markdown table of the top 20 documents most similar to document i
+    (excluding itself).
+
+    Args:
+        i: 1-based document index.
+        term: Term weighting scheme ('tf', 'tfidf', 'boolean').
+        sim: Similarity function ('cosine', 'jaccard', 'dice', 'overlap').
+        stem: Whether to stem tokens.
+        removestop: Whether to remove stopwords.
+        term_weights: Field weights for term scoring.
+    '''
+    term_funcs = {'tf': compute_tf, 'tfidf': compute_tfidf, 'boolean': compute_boolean}
+    sim_funcs = {'cosine': cosine_sim, 'jaccard': jaccard_sim, 'dice': dice_sim, 'overlap': overlap_sim}
+
+    docs = read_docs('cacm.raw')
+    stopwords = read_stopwords('common_words')
+
+    processed_docs, _ = process_docs_and_queries(docs, [], stem, removestop, stopwords)
+    doc_freqs = compute_doc_freqs(processed_docs)
+    doc_vectors = [term_funcs[term](doc, doc_freqs, term_weights) for doc in processed_docs]
+
+    query_vec = doc_vectors[i - 1]
+    results_with_score = [(doc_id + 1, sim_funcs[sim](query_vec, doc_vec))
+                          for doc_id, doc_vec in enumerate(doc_vectors)
+                          if doc_id + 1 != i]
+    results_with_score = sorted(results_with_score, key=lambda x: -x[1])[:20]
+
+    lines = ['| Rank | Doc # | Title | Similarity |',
+             '|------|-------|-------|------------|']
+    for rank, (doc_id, score) in enumerate(results_with_score, start=1):
+        title = ' '.join(docs[doc_id - 1].title) or '(no title)'
+        lines.append(f'| {rank} | {doc_id} | {title} | {score:.4f} |')
+
+    return '\n'.join(lines)
+
 
 if __name__ == '__main__':
     experiment()
