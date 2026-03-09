@@ -8,6 +8,11 @@ from numpy.linalg import norm
 from nltk.stem.snowball import SnowballStemmer
 from nltk.tokenize import word_tokenize
 
+# Part 3 imports
+import matplotlib.pyplot as plt
+from scipy.sparse.linalg import svds
+from sklearn.feature_extraction import DictVectorizer
+
 # autograder fix
 import nltk
 nltk.download('punkt_tab')
@@ -322,12 +327,67 @@ def norm_precision(results, relevant):
 
 ### Extensions
 
-# TODO: put any extensions here
+# SVD
+# to perform svd
+# start with term-document matrix: term weights using tf, tf-idf, or boolean weighting for each document
+# use scipy svd to compute the svd decomposition of the matrix--can adjust the k value to change dimensions
+# the result will be a "doc-concept" and "term-concept" matrix from the decomposition
+# each query will need to be transformed by the resulting decomposition to ensure dimensions are correct
+# then, the various transformed vectors can be compared with our original similarity functions
+# vectors will need to be transformed back to dict form to work with original functions
+def svd(doc_vectors: List[Document], k: int):
+    '''
+    Peform SVD for latent semantic indexing, reducing to k dimensions
+    
+    Params
+        doc_vectors: document-term mappings
+        k: dimensions for resulting decomposition
+
+    Returns
+        vec: vector transformer
+        U, sigma, Vt: matrix decomposition
+    '''
+    # convert doc vectors to a sparse term-document matrix
+    vec = DictVectorizer(sparse=True)
+    doc_term_mat = vec.fit_transform(doc_vectors)
+
+    # perform svd to decompose matrix
+    U, sigma, Vt = svds(doc_term_mat, k=k)
+
+    return vec, U, sigma, Vt
+
+def convert_query_vec(q_vec: Dict[str, float], vec: DictVectorizer, sigma, Vt):
+    '''
+    Convert standard query representation into compressed version
+
+    Params
+        vec: vector transformer
+        sigma, Vt: matrix decomposition
+
+    Returns
+        Compressed query vector
+    '''
+    q_vec_tranf = vec.transform(q_vec)
+    sig_inv = np.diag(1 / sigma)
+    return q_vec_tranf @ Vt.T @ sig_inv
+
+def plot_svd(sigma):
+    '''
+    Plot singular values from decomposition
+    Allows examination of effectiveness as number of components increases
+
+    Params
+        sigma: kxk matrix from SVD
+    '''
+    plt.plot(sigma[::-1])
+    plt.xlabel('Component')
+    plt.ylabel('Singular value')
+    plt.show()
 
 
 ### Search
 
-def experiment():
+def experiment(apply_svd=True):
     docs = read_docs('cacm.raw')
     queries = read_docs('query.raw')
     rels = read_rels('query.rels')
@@ -364,10 +424,25 @@ def experiment():
         doc_freqs = compute_doc_freqs(processed_docs)
         doc_vectors = [term_funcs[term](doc, doc_freqs, term_weights) for doc in processed_docs]
 
+        # optionally run svd to transform document representation
+        if apply_svd:
+            # get decomposition
+            vec, U, sigma, Vt = svd(doc_vectors, 300)
+            # plot_svd(sigma) # -- decided on 300 components for strong predictions with reasonable compression
+            # transform document vectors based on decomposition
+            doc_vectors = vec.transform(doc_vectors) @ np.linalg.matrix_transpose(Vt) @ np.diag(sigma)
+            doc_vectors = vec.inverse_transform(doc_vectors)    # back to sparse dict
+
         metrics = []
 
         for query in processed_queries:
             query_vec = term_funcs[term](query, doc_freqs, term_weights)
+
+            # optionally use svd to transform query and generate results
+            if apply_svd:
+                query_vec = convert_query_vec(query_vec, vec, sigma, Vt)
+                query_vec = vec.inverse_transform(query_vec)[0]
+            
             results = search(doc_vectors, query_vec, sim_funcs[sim])
             # results = search_debug(processed_docs, query, rels[query.doc_id], doc_vectors, query_vec, sim_funcs[sim])
             rel = rels[query.doc_id]
