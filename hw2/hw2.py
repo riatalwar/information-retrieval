@@ -501,7 +501,7 @@ def search_debug(docs, query, relevant, doc_vectors, query_vec, sim):
 
 # AI-Generated helper functions to extract data
 def query_top20_table(i: int, term='tfidf', sim='cosine', stem=True, removestop=True,
-                      term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1)) -> str:
+                      term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1), apply_svd=True) -> str:
     '''
     Returns a markdown table of the top 20 retrieved documents for the i-th query.
 
@@ -525,8 +525,20 @@ def query_top20_table(i: int, term='tfidf', sim='cosine', stem=True, removestop=
     doc_freqs = compute_doc_freqs(processed_docs)
     doc_vectors = [term_funcs[term](doc, doc_freqs, term_weights) for doc in processed_docs]
 
+    if apply_svd:
+        # get decomposition
+        vec, U, sigma, Vt = svd(doc_vectors, 300)
+        # transform document vectors based on decomposition
+        doc_vectors = vec.transform(doc_vectors) @ np.linalg.matrix_transpose(Vt) @ np.diag(sigma)
+        doc_vectors = vec.inverse_transform(doc_vectors)    # back to sparse dict
+
     query = processed_queries[i - 1]
     query_vec = term_funcs[term](query, doc_freqs, term_weights)
+
+    if apply_svd:
+        query_vec = convert_query_vec(query_vec, vec, sigma, Vt)
+        query_vec = query_vec = vec.inverse_transform(query_vec)[0]
+
     relevant = set(rels.get(query.doc_id, []))
 
     results_with_score = [(doc_id + 1, sim_funcs[sim](query_vec, doc_vec))
@@ -545,7 +557,7 @@ def query_top20_table(i: int, term='tfidf', sim='cosine', stem=True, removestop=
 
 
 def query_top10_overlap(i: int, term='tfidf', sim='cosine', stem=True, removestop=True,
-                        term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1)) -> str:
+                        term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1), apply_svd=True) -> str:
     '''
     Returns a markdown bullet list of overlapping terms (nonzero weight in both the query
     and document vectors) for each of the top 10 retrieved documents for the i-th query.
@@ -569,8 +581,20 @@ def query_top10_overlap(i: int, term='tfidf', sim='cosine', stem=True, removesto
     doc_freqs = compute_doc_freqs(processed_docs)
     doc_vectors = [term_funcs[term](doc, doc_freqs, term_weights) for doc in processed_docs]
 
+    if apply_svd:
+        # get decomposition
+        vec, U, sigma, Vt = svd(doc_vectors, 300)
+        # transform document vectors based on decomposition
+        doc_vectors = vec.transform(doc_vectors) @ np.linalg.matrix_transpose(Vt) @ np.diag(sigma)
+        doc_vectors = vec.inverse_transform(doc_vectors)    # back to sparse dict
+
     query = processed_queries[i - 1]
     query_vec = term_funcs[term](query, doc_freqs, term_weights)
+
+    if apply_svd:
+        query_vec = convert_query_vec(query_vec, vec, sigma, Vt)
+        query_vec = query_vec = vec.inverse_transform(query_vec)[0]
+        
     query_terms = set(query_vec.keys())
 
     results_with_score = [(doc_id + 1, sim_funcs[sim](query_vec, doc_vec), doc_vec)
@@ -585,6 +609,7 @@ def query_top10_overlap(i: int, term='tfidf', sim='cosine', stem=True, removesto
         if overlap:
             for term in overlap:
                 lines.append(f'  - {term} (query: {query_vec[term]:.4f}, doc: {doc_vec[term]:.4f})')
+                if len(lines) > 10 * rank: break
         else:
             lines.append('  - (none)')
 
@@ -645,7 +670,7 @@ def relevant_in_top20_table(query_ids: List[int]) -> str:
 
 
 def doc_top20_table(i: int, term='tfidf', sim='cosine', stem=True, removestop=True,
-                    term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1)) -> str:
+                    term_weights=TermWeights(author=1, title=3, keyword=4, abstract=1), apply_svd=True) -> str:
     '''
     Returns a markdown table of the top 20 documents most similar to document i
     (excluding itself).
@@ -668,6 +693,13 @@ def doc_top20_table(i: int, term='tfidf', sim='cosine', stem=True, removestop=Tr
     doc_freqs = compute_doc_freqs(processed_docs)
     doc_vectors = [term_funcs[term](doc, doc_freqs, term_weights) for doc in processed_docs]
 
+    if apply_svd:
+        # get decomposition
+        vec, U, sigma, Vt = svd(doc_vectors, 300)
+        # transform document vectors based on decomposition
+        doc_vectors = vec.transform(doc_vectors) @ np.linalg.matrix_transpose(Vt) @ np.diag(sigma)
+        doc_vectors = vec.inverse_transform(doc_vectors)    # back to sparse dict
+
     query_vec = doc_vectors[i - 1]
     results_with_score = [(doc_id + 1, sim_funcs[sim](query_vec, doc_vec))
                           for doc_id, doc_vec in enumerate(doc_vectors)
@@ -685,3 +717,19 @@ def doc_top20_table(i: int, term='tfidf', sim='cosine', stem=True, removestop=Tr
 
 if __name__ == '__main__':
     experiment()
+
+    # print('# Top 20 Documents by Query')
+    # for q in [6, 9, 22]:
+    #     print(f'\n## Query {q}\n')
+    #     for s in [True, False]:
+    #         print(f'### Stem: {s}')
+    #         print(query_top20_table(q, stem=s))
+    #         print('\n#### Top 10 Documents Relevant Terms')
+    #         print(query_top10_overlap(q, stem=s))
+
+    # print('\n# Top 20 Documents by Document')
+    # for d in [239, 1236, 2740]:
+    #     print(f'\n## Document {d}\n')
+    #     for s in [True, False]:
+    #         print(f'\n### Stem: {s}')
+    #         print(doc_top20_table(d, stem=s))
