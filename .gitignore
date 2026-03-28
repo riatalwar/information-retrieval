@@ -7,3 +7,4 @@
 */*.raw
 hw2/query.rels
 hw2/common_words
+hw3/*.tsv
