@@ -1,14 +1,13 @@
 from collections import defaultdict
 from math import e
+
+from numpy.linalg import norm
 from nltk.stem.snowball import SnowballStemmer
 from nltk.tokenize import word_tokenize
 import sys, os
 from typing import List, NamedTuple, Dict, Tuple
 
 _orig_cwd = os.getcwd()
-os.chdir(os.path.join(os.path.dirname(__file__), '..', 'hw2'))
-sys.path.insert(0, '.')
-from hw2 import cosine_sim
 
 stemmer = SnowballStemmer('english')
 
@@ -40,12 +39,33 @@ def read_docs(file: str, stem=False) -> List[Sentence]:
 
             # clean up data
             words = [w.lower() for w in word_tokenize(cleaned)]
-            key_idx = next(i for i, w in enumerate(words) if w == keyword)
+            key_idx = next((i for i, w in enumerate(words) if w == keyword), -1)    # default to -1 for datasets w no keyword
             if stem: words = [stemmer.stem(w) for w in words]
 
             sentences.append(Sentence(doc_id, words, label, key_idx))
     return sentences
 
+
+### Vector Similarity
+
+def dictdot(x: Dict[str, float], y: Dict[str, float]) -> float:
+    '''
+    Computes the dot product of vectors x and y, represented as sparse dictionaries.
+    '''
+    keys = list(x.keys()) if len(x) < len(y) else list(y.keys())
+    return sum(x.get(key, 0) * y.get(key, 0) for key in keys)
+
+def cosine_sim(x: Dict[str, float], y: Dict[str, float]) -> float:
+    '''
+    Computes the cosine similarity between two sparse term vectors represented as dictionaries.
+    '''
+    num = dictdot(x, y)
+    if num == 0:
+        return 0
+    return num / (norm(list(x.values())) * norm(list(y.values())))
+
+
+### Weighting Methods
 
 def compute_unweighted(s: Sentence) -> Dict[str, float]:
     vec = defaultdict(float)
@@ -130,21 +150,24 @@ def compute_similarity(x: Dict[str, float], profile1: Dict[str, float], profile2
     return 1 if diff >= 0 else 2
 
 
-def run(file: str):
+def run(train_file: str, test_file: str):
     '''
     4. In Step 3, keep a running count of the total number of the test examples 
     that your program classifies correctly and incorrectly. At the end, print 
     out the percent correct: total correct / (total correct + total incorrect).
     '''
     # setup processing
-    sentences = read_docs(file)
-    vecs = [compute_unweighted(s) for s in sentences]
-    profile1, profile2 = create_profile_vectors(sentences, vecs)
+    train_sentences = read_docs(train_file)
+    test_sentences = read_docs(test_file)
+    train_vecs = [compute_unweighted(s) for s in train_sentences]
+    test_vecs = [compute_unweighted(s) for s in test_sentences]
+
+    profile1, profile2 = create_profile_vectors(train_sentences, train_vecs)
 
     # tally correct categorizations
     correct = 0
     incorrect = 0
-    for s, vec in zip(sentences, vecs):
+    for s, vec in zip(test_sentences, test_vecs):
         sense = compute_similarity(vec, profile1, profile2)
         if sense == s.label:
             correct += 1 
@@ -155,6 +178,9 @@ def run(file: str):
 
 
 if __name__ == '__main__':
-    filename = os.path.join(_orig_cwd, sys.argv[1])
-    acc = run(filename)
+    if len(sys.argv) != 3:
+        raise Exception("Usage: python hw3.py <file-train.tsv> <file-test.tsv>")
+    train_file = os.path.join(_orig_cwd, sys.argv[1])
+    test_file = os.path.join(_orig_cwd, sys.argv[2])
+    acc = run(train_file, test_file)
     print(f'Accuracy: {acc}')
