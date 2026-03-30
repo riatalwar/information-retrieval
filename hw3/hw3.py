@@ -33,9 +33,9 @@ def read_docs(file: str, stem=False) -> List[Sentence]:
             doc_id, label, raw_text = int(parts[0]), int(parts[1]), parts[2]
             raw_words = raw_text.split()
             # identify keyword
-            marked = next(w for w in raw_words if w.startswith('.X-'))
-            keyword = marked[3:].lower()
-            cleaned = raw_text.replace(marked, keyword, 1)
+            marked = next((w for w in raw_words if w.startswith('.X-')), None)
+            keyword = None if marked == None else marked[3:].lower()
+            cleaned = raw_text if marked == None else raw_text.replace(marked, keyword, 1)
 
             # clean up data
             words = [w.lower() for w in word_tokenize(cleaned)]
