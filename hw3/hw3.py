@@ -1,12 +1,16 @@
 from collections import defaultdict
-from typing import List, NamedTuple, Dict, Tuple
+from math import e
+from nltk.stem.snowball import SnowballStemmer
+from nltk.tokenize import word_tokenize
 import sys, os
+from typing import List, NamedTuple, Dict, Tuple
+
 _orig_cwd = os.getcwd()
 os.chdir(os.path.join(os.path.dirname(__file__), '..', 'hw2'))
 sys.path.insert(0, '.')
 from hw2 import cosine_sim
-from nltk.tokenize import word_tokenize
-from math import e
+
+stemmer = SnowballStemmer('english')
 
 # Implement a nearest centroid classifier (also called a Rocchio classifier)
 
@@ -16,7 +20,7 @@ class Sentence(NamedTuple):
     label: int
     key_idx: int
 
-def read_docs(file: str) -> List[Sentence]:
+def read_docs(file: str, stem=False) -> List[Sentence]:
     '''
     1. Initialize the “document” vectors, where each example sentence is its 
     own document. The weighting options will be discussed below. In addition,
@@ -34,8 +38,11 @@ def read_docs(file: str) -> List[Sentence]:
             keyword = marked[3:].lower()
             cleaned = raw_text.replace(marked, keyword, 1)
 
+            # clean up data
             words = [w.lower() for w in word_tokenize(cleaned)]
             key_idx = next(i for i, w in enumerate(words) if w == keyword)
+            if stem: words = [stemmer.stem(w) for w in words]
+
             sentences.append(Sentence(doc_id, words, label, key_idx))
     return sentences
 
