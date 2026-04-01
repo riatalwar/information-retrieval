@@ -11,6 +11,12 @@ _orig_cwd = os.getcwd()
 
 stemmer = SnowballStemmer('english')
 
+def read_stopwords(file):
+    with open(file) as f:
+        return set([x.strip() for x in f.readlines()])
+
+stopwords = read_stopwords('common_words')
+
 # Implement a nearest centroid classifier (also called a Rocchio classifier)
 
 class Sentence(NamedTuple):
@@ -19,7 +25,7 @@ class Sentence(NamedTuple):
     label: int
     key_idx: int
 
-def read_docs(file: str, stem=False) -> List[Sentence]:
+def read_docs(file: str, stem=False, stop=False, lr_tokens=False) -> List[Sentence]:
     '''
     1. Initialize the “document” vectors, where each example sentence is its 
     own document. The weighting options will be discussed below. In addition,
@@ -32,15 +38,30 @@ def read_docs(file: str, stem=False) -> List[Sentence]:
             parts = line.strip().split('\t')
             doc_id, label, raw_text = int(parts[0]), int(parts[1]), parts[2]
             raw_words = raw_text.split()
-            # identify keyword
-            marked = next((w for w in raw_words if w.startswith('.X-')), None)
-            keyword = None if marked == None else marked[3:].lower()
-            cleaned = raw_text if marked == None else raw_text.replace(marked, keyword, 1)
 
-            # clean up data
+            # strip keyword marker and tokenize
+            marked = next((w for w in raw_words if w.startswith('.X-')), None)
+            keyword = marked[3:].lower() if marked else None
+            cleaned = raw_text.replace(marked, keyword, 1) if marked else raw_text
             words = [w.lower() for w in word_tokenize(cleaned)]
-            key_idx = next((i for i, w in enumerate(words) if w == keyword), -1)    # default to -1 for datasets w no keyword
-            if stem: words = [stemmer.stem(w) for w in words]
+
+            # optionally remove stopwords
+            if stop:
+                words = [w for w in words if w not in stopwords]
+
+            # find keyword index (before stemming so keyword matches as-is)
+            key_idx = next((i for i, w in enumerate(words) if w == keyword), -1)
+
+            # optionally stem
+            if stem:
+                words = [stemmer.stem(w) for w in words]
+
+            # make words immediately adjacent to keyword special tokens
+            if lr_tokens:
+                if key_idx > 0:
+                    words[key_idx - 1] = f'L_{words[key_idx - 1]}'
+                if key_idx < len(words) - 1:
+                    words[key_idx + 1] = f'R_{words[key_idx + 1]}'
 
             sentences.append(Sentence(doc_id, words, label, key_idx))
     return sentences
@@ -150,15 +171,15 @@ def compute_similarity(x: Dict[str, float], profile1: Dict[str, float], profile2
     return 1 if diff >= 0 else 2
 
 
-def run(train_file: str, test_file: str):
+def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False):
     '''
     4. In Step 3, keep a running count of the total number of the test examples 
     that your program classifies correctly and incorrectly. At the end, print 
     out the percent correct: total correct / (total correct + total incorrect).
     '''
     # setup processing
-    train_sentences = read_docs(train_file)
-    test_sentences = read_docs(test_file)
+    train_sentences = read_docs(train_file, stem, stop, lr_tokens)
+    test_sentences = read_docs(test_file, stem, stop, lr_tokens)
     train_vecs = [compute_unweighted(s) for s in train_sentences]
     test_vecs = [compute_unweighted(s) for s in test_sentences]
 
@@ -182,5 +203,5 @@ if __name__ == '__main__':
         raise Exception("Usage: python hw3.py <file-train.tsv> <file-test.tsv>")
     train_file = os.path.join(_orig_cwd, sys.argv[1])
     test_file = os.path.join(_orig_cwd, sys.argv[2])
-    acc = run(train_file, test_file)
+    acc = run(train_file, test_file, stem=True, stop=True, lr_tokens=True)
     print(f'Accuracy: {acc}')
