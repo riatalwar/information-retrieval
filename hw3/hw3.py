@@ -1,6 +1,7 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from math import e
 
+import numpy as np
 from numpy.linalg import norm
 from nltk.stem.snowball import SnowballStemmer
 from nltk.tokenize import word_tokenize
@@ -137,6 +138,33 @@ def compute_custom_weighting(s: Sentence, sigma=2) -> Dict[str, float]:
     return dict(vec)  # convert back to a regular dict
 
 
+def compute_doc_freqs(sentences: List[Sentence]):
+    '''
+    Computes document frequency, i.e. how many documents contain a specific word
+    '''
+    freq = Counter()
+    for s in sentences:
+        words = set()
+        for word in s.text:
+            words.add(word)
+        for word in words:
+            freq[word] += 1
+    return freq
+
+def compute_tfidf(vec: Dict[str, float], doc_freqs: Dict[str, int], N: int) -> Dict[str, float]:
+    '''
+    Computes the tf-idf vector for a sentence based on some weighted vector representation.
+    '''
+    tfidf_computed = dict()
+
+    # compute tf-idf for each term
+    for word, tf in vec.items():
+        if tf == 0 or doc_freqs.get(word, 0) == 0: continue
+        tfidf_computed[word] = (1 + np.log10(tf)) * np.log10(N / doc_freqs[word])
+
+    return tfidf_computed
+
+
 def create_profile_vectors(sentences: List[Sentence], vecs: List[Dict[str, float]]) -> Tuple[Dict, Dict]:
     '''
     2. Using the vectors in the training set, create two profile vectors V_profile1
@@ -171,7 +199,7 @@ def compute_similarity(x: Dict[str, float], profile1: Dict[str, float], profile2
     return 1 if diff >= 0 else 2
 
 
-def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False):
+def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False, tfidf=False):
     '''
     4. In Step 3, keep a running count of the total number of the test examples 
     that your program classifies correctly and incorrectly. At the end, print 
@@ -182,6 +210,12 @@ def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False
     test_sentences = read_docs(test_file, stem, stop, lr_tokens)
     train_vecs = [compute_unweighted(s) for s in train_sentences]
     test_vecs = [compute_unweighted(s) for s in test_sentences]
+
+    if tfidf:
+        N = len(train_sentences)
+        doc_freqs = compute_doc_freqs(train_sentences)
+        train_vecs = [compute_tfidf(v, doc_freqs, N) for v in train_vecs]
+        test_vecs = [compute_tfidf(v, doc_freqs, N) for v in test_vecs]
 
     profile1, profile2 = create_profile_vectors(train_sentences, train_vecs)
 
@@ -200,8 +234,8 @@ def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
-        raise Exception("Usage: python hw3.py <file-train.tsv> <file-test.tsv>")
+        raise Exception("Usage: python hw3.py <file-train.tsv> <file-dev.tsv>")
     train_file = os.path.join(_orig_cwd, sys.argv[1])
     test_file = os.path.join(_orig_cwd, sys.argv[2])
-    acc = run(train_file, test_file, stem=True, stop=True, lr_tokens=True)
+    acc = run(train_file, test_file, stem=False, stop=True, lr_tokens=True, tfidf=True)
     print(f'Accuracy: {acc}')
