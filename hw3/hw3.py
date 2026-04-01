@@ -138,6 +138,8 @@ def compute_custom_weighting(s: Sentence, sigma=2) -> Dict[str, float]:
     return dict(vec)  # convert back to a regular dict
 
 
+## TF-IDF
+
 def compute_doc_freqs(sentences: List[Sentence]):
     '''
     Computes document frequency, i.e. how many documents contain a specific word
@@ -184,6 +186,61 @@ def create_profile_vectors(sentences: List[Sentence], vecs: List[Dict[str, float
     return profile1, profile2
 
 
+## Bayesian Classification
+
+def create_sum_vectors(sentences: List[Sentence], vecs: List[Dict[str, float]]) -> Tuple[Dict, Dict]:
+    '''
+    Create V_sum1 and V_sum2, containing the sum of all the vectors assigned to
+    sense 1 or 2 respectively. This is identical to the process of computing
+    V_profile1 and V_profile2 in the vector model, except that you don't divide
+    by the number of vectors.
+    '''
+    tally = {1: defaultdict(float), 2: defaultdict(float)}
+    counts = {1: 0, 2: 0}
+
+    for s, vec in zip(sentences, vecs):
+        for word, weight in vec.items():
+            tally[s.label][word] += weight
+        counts[s.label] += 1
+
+    return tally[1], tally[2]
+
+def vector_log_likelihood(v_sum1: Dict[str, float], v_sum2: Dict[str, float], epsilon=0.2) -> Dict[str, float]:
+    '''
+    For all $term in V_sum2, compute the LogLikelihood ratio.
+
+    In this very simple smoothing model, set $EPSILON to a value such as 0.2. 
+    You may perform more sophisticated smoothing procedures if you so choose.
+    '''
+    v2_words = set(v_sum1.keys())
+    log_like = dict()
+    for w, v in v_sum2.items():
+        if v_sum1.get(w, 0) > 0:
+            log_like[w] = np.log10(v_sum1[w] / v)
+        else:
+            log_like[w] = np.log10(epsilon / v_sum2[w])
+    for w, v in v_sum1.items():
+        if w not in v2_words:
+            log_like[w] = np.log10(v / epsilon)
+
+    return log_like
+
+def bayesian_classification(v_test: Dict[str, float], log_like: Dict[str, float]) -> float:
+    '''
+    The larger the deviation of $sumofLL from 0, the larger our confidence 
+    in the classification of this test vector.
+
+    When reporting the results of each of these test vectors, print the true_class 
+    for the vector, the precicted_class for the vector, the $sumofLL, and the
+    $titles[$dn] for that test case, much like you would do for the vector model.
+    '''
+    likelihood = 0
+    for w in v_test.keys():
+        likelihood += log_like.get(w, 0)
+        
+    return likelihood
+
+
 def compute_similarity(x: Dict[str, float], profile1: Dict[str, float], profile2: Dict[str, float]) -> float:
     '''
     3. For each vector in the test set, compute its similarity to each profile vector:
@@ -199,7 +256,7 @@ def compute_similarity(x: Dict[str, float], profile1: Dict[str, float], profile2
     return 1 if diff >= 0 else 2
 
 
-def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False, tfidf=False):
+def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False, tfidf=False, bayesian=False):
     '''
     4. In Step 3, keep a running count of the total number of the test examples 
     that your program classifies correctly and incorrectly. At the end, print 
@@ -208,8 +265,8 @@ def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False
     # setup processing
     train_sentences = read_docs(train_file, stem, stop, lr_tokens)
     test_sentences = read_docs(test_file, stem, stop, lr_tokens)
-    train_vecs = [compute_unweighted(s) for s in train_sentences]
-    test_vecs = [compute_unweighted(s) for s in test_sentences]
+    train_vecs = [compute_unweighted(s) for s in train_sentences]   # MODIFY WEIGHTING METHOD
+    test_vecs = [compute_unweighted(s) for s in test_sentences]     # MODIFY WEIGHTING METHOD
 
     if tfidf:
         N = len(train_sentences)
@@ -217,13 +274,22 @@ def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False
         train_vecs = [compute_tfidf(v, doc_freqs, N) for v in train_vecs]
         test_vecs = [compute_tfidf(v, doc_freqs, N) for v in test_vecs]
 
-    profile1, profile2 = create_profile_vectors(train_sentences, train_vecs)
+    if bayesian:
+        v_sum1, v_sum2 = create_sum_vectors(train_sentences, train_vecs)
+        log_likelihood = vector_log_likelihood(v_sum1, v_sum2)
+    else:
+        profile1, profile2 = create_profile_vectors(train_sentences, train_vecs)
 
     # tally correct categorizations
     correct = 0
     incorrect = 0
     for s, vec in zip(test_sentences, test_vecs):
-        sense = compute_similarity(vec, profile1, profile2)
+        if bayesian:
+            sum_like = bayesian_classification(vec, log_likelihood)
+            sense = 1 if sum_like > 0 else 2
+            print(f'score: {sum_like} | classification: {sense} | actual: {s.label}')
+        else:
+            sense = compute_similarity(vec, profile1, profile2)
         if sense == s.label:
             correct += 1 
         else:
@@ -231,11 +297,16 @@ def run(train_file: str, test_file: str, stem=False, stop=False, lr_tokens=False
 
     return correct / (correct + incorrect)
 
+# INSTRUCTIONS
+# modify the booleans below to enable/disable stemming, stopword removal, adjacent token recognition, and tf-idf weighting
+# include the train and test files as specified below when running the program
+# the program will print out the resulting accuracy using the specified modifications
+# modify the function called above to change the weighting method (marked 'MODIFY WEIGHTING METHOD')
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
         raise Exception("Usage: python hw3.py <file-train.tsv> <file-dev.tsv>")
     train_file = os.path.join(_orig_cwd, sys.argv[1])
     test_file = os.path.join(_orig_cwd, sys.argv[2])
-    acc = run(train_file, test_file, stem=False, stop=True, lr_tokens=True, tfidf=True)
+    acc = run(train_file, test_file, stem=True, stop=True, lr_tokens=False, tfidf=False, bayesian=True)
     print(f'Accuracy: {acc}')
