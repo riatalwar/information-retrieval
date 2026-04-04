@@ -39,8 +39,17 @@ def get_nonlocal_links(url):
 
     # TODO: implement
     links = get_links(url)
-    filtered = []
-    return filtered
+    filtered = set()
+    
+
+    split = parse.urlsplit(url)
+    host = split.hostname
+    for l, t in links:
+        l_split = parse.urlsplit(l)
+        if not l_split.netloc or l_split.hostname == host: continue
+        filtered.add((l, t))
+
+    return list(filtered)
 
 
 def crawl(root, wanted_content=[], within_domain=True):
