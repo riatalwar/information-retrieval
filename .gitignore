@@ -5,6 +5,14 @@
 */classes
 */segment.*
 */*.raw
-hw2/query.rels
 */common_words
+*/*.log
+
+hw2/query.rels
+
 hw3/*.tsv
+
+hw4/links.txt
+hw4/nonlocal.txt
+hw4/visited.txt
+hw4/extracted.txt
