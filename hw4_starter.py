@@ -62,23 +62,25 @@ def crawl(root, wanted_content=[], within_domain=True):
     queue = Queue()
     queue.put(root)
 
-    visited = []
+    visited = set()
     extracted = []
 
     while not queue.empty():
         url = queue.get()
+        if url in visited: continue     # maintain efficiency with visited set
         try:
             req = request.urlopen(url)
             html = req.read()
 
-            visited.append(url)
+            visited.add(url)
             visitlog.debug(url)
 
             for ex in extract_information(url, html):
                 extracted.append(ex)
                 extractlog.debug(ex)
 
-            for link, title in parse_links(url, html):
+            # ensure only enqueuing nonlocal links
+            for link, title in get_nonlocal_links(url):
                 queue.put(link)
 
         except Exception as e:
