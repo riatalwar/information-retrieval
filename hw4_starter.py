@@ -18,7 +18,7 @@ def parse_links(root, html):
             text = link.string
             if not text:
                 text = ''
-            text = re.sub('\s+', ' ', text).strip()
+            text = re.sub('\\s+', ' ', text).strip()
             yield (parse.urljoin(root, link.get('href')), text)
 
 
@@ -95,7 +95,7 @@ def extract_information(address, html):
 
     # TODO: implement
     results = []
-    for match in re.findall('\d\d\d-\d\d\d-\d\d\d\d', str(html)):
+    for match in re.findall('\\d\\d\\d-\\d\\d\\d-\\d\\d\\d\\d', str(html)):
         results.append((address, 'PHONE', match))
     return results
 
