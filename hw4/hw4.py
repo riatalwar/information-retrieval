@@ -65,6 +65,8 @@ def crawl(root, wanted_content=[], within_domain=True):
     visited = set()
     extracted = []
 
+    ROOT_HOST = parse.urlsplit(root).hostname
+
     while not queue.empty():
         url = queue.get()
         if url in visited: continue     # maintain efficiency with visited set
@@ -79,9 +81,18 @@ def crawl(root, wanted_content=[], within_domain=True):
                 extracted.append(ex)
                 extractlog.debug(ex)
 
-            # ensure only enqueuing nonlocal links
-            for link, title in get_nonlocal_links(url):
-                queue.put(link)
+            # TODO: is this right? are self-ref pages ok or excluded? instructions are confusing
+            if within_domain:
+                # crawl links only in same domain if specified
+                for link, title in get_links(url):
+                    host = parse.urlsplit(link)
+                    if host == ROOT_HOST:
+                        queue.put(link)
+
+            else:
+                # ensure only enqueuing nonlocal links
+                for link, title in get_nonlocal_links(url):
+                    queue.put(link)
 
         except Exception as e:
             print(e, url)
