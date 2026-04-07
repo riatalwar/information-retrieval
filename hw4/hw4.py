@@ -107,8 +107,16 @@ def extract_information(address, html):
 
     # TODO: implement
     results = []
+    # phone numbers
     for match in re.findall('\\d\\d\\d-\\d\\d\\d-\\d\\d\\d\\d', str(html)):
         results.append((address, 'PHONE', match))
+    # email addresses 
+    for match in re.findall('[a-zA-Z\\d._-]+@[a-zA-Z\\d]+\\.[a-zA-Z]+', str(html)):
+        results.append((address, 'EMAIL', match))
+    # physical addresses
+    for match in re.findall('[a-zA-Z ]+, [a-zA-Z ]+[.]* \\d\\d\\d\\d\\d', str(html)):
+        results.append((address, 'ADDRESS', match))
+
     return results
 
 
