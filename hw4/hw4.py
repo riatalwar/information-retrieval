@@ -40,7 +40,6 @@ def get_nonlocal_links(url):
     # TODO: implement
     links = get_links(url)
     filtered = set()
-    
 
     split = parse.urlsplit(url)
     host = split.hostname
@@ -72,6 +71,8 @@ def crawl(root, wanted_content=[], within_domain=True):
         if url in visited: continue     # maintain efficiency with visited set
         try:
             req = request.urlopen(url)
+            content_type = req.info().get_content_type()
+            if content_type not in wanted_content: continue # skip pages of unwanted content
             html = req.read()
 
             visited.add(url)
@@ -85,7 +86,7 @@ def crawl(root, wanted_content=[], within_domain=True):
             if within_domain:
                 # crawl links only in same domain if specified
                 for link, title in get_links(url):
-                    host = parse.urlsplit(link)
+                    host = parse.urlsplit(link).hostname
                     if host == ROOT_HOST:
                         queue.put(link)
 
@@ -126,7 +127,7 @@ def main():
     nonlocal_links = get_nonlocal_links(site)
     writelines('nonlocal.txt', nonlocal_links)
 
-    visited, extracted = crawl(site)
+    visited, extracted = crawl(site, 'text/html')
     writelines('visited.txt', visited)
     writelines('extracted.txt', extracted)
 
