@@ -4,6 +4,7 @@ import sys
 from bs4 import BeautifulSoup
 from queue import Queue
 from urllib import parse, request
+from queue import PriorityQueue
 
 logging.basicConfig(level=logging.DEBUG, filename='output.log', filemode='w')
 visitlog = logging.getLogger('visited')
@@ -22,14 +23,37 @@ def parse_links(root, html):
             yield (parse.urljoin(root, link.get('href')), text)
 
 
+def get_relevance(url):
+    score = len(url.split('/'))
+    score -= url.count('&') + url.count('?')
+    score -= sum(1 if c.isdigit() else 0 for c in url)
+    return score
+
+
+def is_self_ref(root, url):
+    root_data = parse.urlsplit(root)
+    url_data = parse.urlsplit(url)
+    return (root_data.scheme == url_data.scheme and 
+            root_data.netloc == url_data.netloc and 
+            root_data.path.rstrip('/') == url_data.path.rstrip('/'))
+
+
 def parse_links_sorted(root, html):
     # TODO: implement
-    return []
+    links = list(parse_links(root, html))
+    scores = []
+
+    for l, t in links:
+        score = get_relevance(l)
+        scores.append((score, l, t))
+
+    scores.sort(key=lambda x: x[0], reverse=True)
+    return [(l, t) for s, l, t in scores]
 
 
 def get_links(url):
     res = request.urlopen(url)
-    return list(parse_links(url, res.read()))
+    return list(parse_links_sorted(url, res.read()))
 
 
 def get_nonlocal_links(url):
@@ -58,8 +82,8 @@ def crawl(root, wanted_content=[], within_domain=True):
     '''
     # TODO: implement
 
-    queue = Queue()
-    queue.put(root)
+    queue = PriorityQueue()
+    queue.put((0, root)) # give root highest priority
 
     visited = set()
     extracted = []
@@ -67,7 +91,7 @@ def crawl(root, wanted_content=[], within_domain=True):
     ROOT_HOST = parse.urlsplit(root).hostname
 
     while not queue.empty():
-        url = queue.get()
+        url = queue.get()[1]
         if url in visited: continue     # maintain efficiency with visited set
         try:
             req = request.urlopen(url)
@@ -87,13 +111,16 @@ def crawl(root, wanted_content=[], within_domain=True):
                 # crawl links only in same domain if specified
                 for link, title in get_links(url):
                     host = parse.urlsplit(link).hostname
-                    if host == ROOT_HOST:
-                        queue.put(link)
+                    if host == ROOT_HOST and not is_self_ref(url, link):
+                        score = get_relevance(link)
+                        queue.put((score, link))
 
             else:
                 # ensure only enqueuing nonlocal links
                 for link, title in get_nonlocal_links(url):
-                    queue.put(link)
+                    if not is_self_ref(url, link):
+                        score = get_relevance(link)
+                        queue.put((score, link))
 
         except Exception as e:
             print(e, url)
@@ -114,7 +141,7 @@ def extract_information(address, html):
     for match in re.findall('[a-zA-Z\\d._-]+@[a-zA-Z\\d]+\\.[a-zA-Z]+', str(html)):
         results.append((address, 'EMAIL', match))
     # physical addresses
-    for match in re.findall('[a-zA-Z ]+, [a-zA-Z ]+[.]* \\d\\d\\d\\d\\d', str(html)):
+    for match in re.findall('[a-zA-Z]+(?:[ ][a-zA-Z]+)*, [a-zA-Z ]+[.]* \\d\\d\\d\\d\\d', str(html)):
         results.append((address, 'ADDRESS', match))
 
     return results
