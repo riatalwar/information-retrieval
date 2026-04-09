@@ -134,17 +134,33 @@ def extract_information(address, html):
     '''Extract contact information from html, returning a list of (url, category, content) pairs,
     where category is one of PHONE, ADDRESS, EMAIL'''
 
-    # TODO: implement
     results = []
-    # phone numbers
-    for match in re.findall('\\d\\d\\d-\\d\\d\\d-\\d\\d\\d\\d', str(html)):
-        results.append((address, 'PHONE', match))
-    # email addresses 
-    for match in re.findall('[a-zA-Z\\d._-]+@[a-zA-Z\\d]+\\.[a-zA-Z]+', str(html)):
-        results.append((address, 'EMAIL', match))
-    # physical addresses
-    for match in re.findall('[a-zA-Z]+(?:[ ][a-zA-Z]+)*, [a-zA-Z ]+[.]* \\d\\d\\d\\d\\d', str(html)):
-        results.append((address, 'ADDRESS', match))
+    text = str(html)
+
+    phone_patterns = [
+        r'\d{3}-\d{3}-\d{4}',                          # 123-456-7890
+        r'\(\d{3}\)\s*\d{3}-\d{4}',                    # (123) 456-7890
+        r'\d{3}\.\d{3}\.\d{4}',                         # 123.456.7890
+        r'\+1[-\s]?\d{3}[-\s]?\d{3}[-\s]?\d{4}',      # +1 123 456 7890
+    ]
+    email_patterns = [
+        r'[a-zA-Z\d._%+-]+@[a-zA-Z\d.-]+\.[a-zA-Z]{2,}',   # standard email
+        r'[a-zA-Z\d._-]+@[a-zA-Z\d]+\.[a-zA-Z]+',           # simple email
+    ]
+    address_patterns = [
+        r'\d+\s+[a-zA-Z0-9\s]+(?:St|Ave|Blvd|Dr|Rd|Ln|Way|Ct|Pl|Court|Place|Road|Street|Avenue|Boulevard|Drive)\.?(?:\s+(?:Apt|Suite|Ste|Unit)\.?\s*\w+)?',  # street address
+        r'[a-zA-Z]+(?:[ ][a-zA-Z]+)*,\s*[a-zA-Z ]+\.?\s*\d{5}(?:-\d{4})?',  # City, State ZIP
+    ]
+
+    for pattern in phone_patterns:
+        for match in re.findall(pattern, text):
+            results.append((address, 'PHONE', match))
+    for pattern in email_patterns:
+        for match in re.findall(pattern, text):
+            results.append((address, 'EMAIL', match))
+    for pattern in address_patterns:
+        for match in re.findall(pattern, text):
+            results.append((address, 'ADDRESS', match))
 
     return results
 
