@@ -2,7 +2,6 @@ import logging
 import re
 import sys
 from bs4 import BeautifulSoup
-from queue import Queue
 from urllib import parse, request
 from queue import PriorityQueue
 
@@ -25,8 +24,8 @@ def parse_links(root, html):
 
 def get_relevance(url):
     score = len(url.split('/'))
-    score -= url.count('&') + url.count('?')
-    score -= sum(1 if c.isdigit() else 0 for c in url)
+    score += url.count('&') + url.count('?')
+    score += sum(1 if c.isdigit() else 0 for c in url)
     return score
 
 
@@ -63,16 +62,19 @@ def get_nonlocal_links(url):
 
     # TODO: implement
     links = get_links(url)
-    filtered = set()
+    filtered = []
+    seen = set()
 
     split = parse.urlsplit(url)
     host = split.hostname
     for l, t in links:
         l_split = parse.urlsplit(l)
         if not l_split.netloc or l_split.hostname == host: continue
-        filtered.add((l, t))
+        if l not in seen:
+            seen.add(l)
+            filtered.append((l, t))
 
-    return list(filtered)
+    return filtered
 
 
 def crawl(root, wanted_content=[], within_domain=True):
@@ -96,7 +98,7 @@ def crawl(root, wanted_content=[], within_domain=True):
         try:
             req = request.urlopen(url)
             content_type = req.info().get_content_type()
-            if content_type not in wanted_content: continue # skip pages of unwanted content
+            if wanted_content and content_type not in wanted_content: continue # skip pages of unwanted content
             html = req.read()
 
             visited.add(url)
@@ -162,7 +164,7 @@ def main():
     nonlocal_links = get_nonlocal_links(site)
     writelines('nonlocal.txt', nonlocal_links)
 
-    visited, extracted = crawl(site, 'text/html')
+    visited, extracted = crawl(site, ['text/html'])
     writelines('visited.txt', visited)
     writelines('extracted.txt', extracted)
 
