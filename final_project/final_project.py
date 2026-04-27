@@ -13,17 +13,30 @@ SEARCH_URL = "https://www.allrecipes.com/search?"
 
 
 class Recipe:
+    # might not need all of these
     title: str
     author: str
     category: str
     time: float
-    yields: int
     ingredients: List[str]
     instructions: str
-    ratings: List
+    rating: List
     cuisine: str
     desc: str
     url: str
+
+    def __init__(self, title, author, category, time, ingredients, instructions, rating, cuisine, desc, url):
+        self.title = title
+        self.author = author
+        self.category = category
+        self.time = time
+        self.ingredients = ingredients
+        self.instructions = instructions
+        self.rating = rating
+        self.cuisine = cuisine
+        self.desc = desc
+        self.url = url
+
 
     def repr(self) -> str:
         return (f"title: {self.title}\n" +
@@ -49,24 +62,26 @@ def rank_recipe():
 
 
 def scrape_page(url: str) -> Recipe:
-    html = urlopen(url).read().decode("utf-8") 
-    scraper = scrape_html(html, url)
+    # fetch page html
+    scraper = cloudscraper.create_scraper()
+    html = scraper.get(url).text
+
+    recipe_scraper = scrape_html(html, url)
     return Recipe(
-        scraper.title(),
-        scraper.author(),
-        scraper.category(),
-        scraper.total_time(),
-        scraper.yields(),
-        scraper.ingredients(),
-        scraper.instructions(),
-        scraper.ratings(),
-        scraper.cuisine(),
-        scraper.description(),
+        recipe_scraper.title(),
+        recipe_scraper.author(),
+        recipe_scraper.category(),
+        recipe_scraper.total_time(),
+        recipe_scraper.ingredients(),
+        recipe_scraper.instructions(),
+        recipe_scraper.ratings(),
+        recipe_scraper.cuisine(),
+        recipe_scraper.description(),
         url
     )
 
 
-def find_recipes(query: str, ct: int):
+def find_recipes(query: str, ct: int) -> List[Recipe]:
     # search for a recipe on allrecipes
     params = { "q": query }
 
@@ -91,17 +106,23 @@ def find_recipes(query: str, ct: int):
     soup = BeautifulSoup(response.text, "html.parser")
     i = 0
     links = []
+    recipes = []
 
     for link in soup.select("a[href*='/recipe/']"):
         href = link.get("href")
         if not href or href in links:
             continue
-        links.append(href)
+        try:
+            recipe = scrape_page(href)
+            recipes.append(recipe)
+            links.append(href)
+        except Exception:
+            continue
         i += 1
         if i >= ct:
             break
 
-    return links
+    return recipes
 
 
 def read_queries_doc(file):
@@ -114,8 +135,7 @@ def main():
     profile = sys.argv[1]
     query = sys.argv[2]
     words = read_queries_doc(query)
-    links = find_recipes(words, 8)
-    print(links)
+    recipes = find_recipes(words, 8)
 
 
 if __name__ == '__main__':
