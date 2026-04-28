@@ -1,15 +1,28 @@
+import json
 import sys
 import time
 import requests
 from recipe_scrapers import scrape_html
 from typing import List
 from urllib.parse import urlencode
-from urllib.request import urlopen
 from bs4 import BeautifulSoup
 import cloudscraper
 
 
 SEARCH_URL = "https://www.allrecipes.com/search?"
+scraper = cloudscraper.create_scraper()
+
+
+class Review:
+    # TODO: figure out how to fetch the likes/tags (API call?)
+    rating: int
+    comment: str
+    likes: int
+    tags: List[str]
+    
+    def __init__(self, rating: int, comment: str):
+        self.rating = rating
+        self.comment = comment
 
 
 class Recipe:
@@ -24,8 +37,9 @@ class Recipe:
     cuisine: str
     desc: str
     url: str
+    reviews: List[Review]
 
-    def __init__(self, title, author, category, time, ingredients, instructions, rating, cuisine, desc, url):
+    def __init__(self, title, author, category, time, ingredients, instructions, rating, cuisine, desc, url, reviews):
         self.title = title
         self.author = author
         self.category = category
@@ -36,6 +50,7 @@ class Recipe:
         self.cuisine = cuisine
         self.desc = desc
         self.url = url
+        self.reviews = reviews
 
 
     def repr(self) -> str:
@@ -61,10 +76,31 @@ def rank_recipe():
     pass
 
 
+def parse_reviews(text: str, ct: int) -> List[Review]:
+    soup = BeautifulSoup(text, "html.parser")
+    i = 0
+    fetched_reviews = []
+    for script_tag in soup.find_all("script", id="allrecipes-schema_1-0"):
+        try:
+            data = json.loads(script_tag.string)[0]
+            reviews = data.get("review", [])
+            if reviews:
+                for review in reviews:
+                    r = Review(
+                        review["reviewRating"]["ratingValue"], 
+                        review["reviewBody"])
+                    fetched_reviews.append(r)
+                    i += 1
+                    if i >= ct: return
+        except Exception:
+            continue
+    return fetched_reviews
+
+
 def scrape_page(url: str) -> Recipe:
     # fetch page html
-    scraper = cloudscraper.create_scraper()
     html = scraper.get(url).text
+    reviews = parse_reviews(html, 5) # placeholder, find first 5 reviews
 
     recipe_scraper = scrape_html(html, url)
     return Recipe(
@@ -77,7 +113,8 @@ def scrape_page(url: str) -> Recipe:
         recipe_scraper.ratings(),
         recipe_scraper.cuisine(),
         recipe_scraper.description(),
-        url
+        url,
+        reviews
     )
 
 
@@ -85,6 +122,7 @@ def find_recipes(query: str, ct: int) -> List[Recipe]:
     # search for a recipe on allrecipes
     params = { "q": query }
 
+    # pretend to be a real user 
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
@@ -96,10 +134,8 @@ def find_recipes(query: str, ct: int) -> List[Recipe]:
     session = requests.Session()
     session.headers.update(HEADERS)
     session.get("https://www.allrecipes.com")
-
     time.sleep(2)
 
-    scraper = cloudscraper.create_scraper()
     response = scraper.get(SEARCH_URL + urlencode(params))
 
     # fetch urls corresponding to recipes
@@ -119,8 +155,7 @@ def find_recipes(query: str, ct: int) -> List[Recipe]:
         except Exception:
             continue
         i += 1
-        if i >= ct:
-            break
+        if i >= ct: break
 
     return recipes
 
