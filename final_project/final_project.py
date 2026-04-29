@@ -216,8 +216,8 @@ def read_queries_doc(file):
 
 
 def main():
-    profile = sys.argv[1]
-    query = sys.argv[2]
+    profile = build_user_profile()
+    query = sys.argv[1]
     words = read_queries_doc(query)
     recipes = find_recipes(words, 8)
 
