@@ -13,6 +13,55 @@ SEARCH_URL = "https://www.allrecipes.com/search?"
 scraper = cloudscraper.create_scraper()
 
 
+class User:
+    name: str
+    dietary_restrictions: List[str]
+    preferred_cuisines: List[str]
+    disliked_ingredients: List[str]
+    liked_ingredients: List[str]
+    liked_recipes: List["Recipe"]  # list of recipe URLs
+
+    def __init__(self, name: str, dietary_restrictions: List[str] = None,
+                 preferred_cuisines: List[str] = None, disliked_ingredients: List[str] = None,
+                 liked_ingredients: List[str] = None):
+        self.name = name
+        self.dietary_restrictions = dietary_restrictions or []
+        self.preferred_cuisines = preferred_cuisines or []
+        self.disliked_ingredients = disliked_ingredients or []
+        self.liked_ingredients = liked_ingredients or []
+        self.liked_recipes = []
+
+    def add_liked_recipe(self, recipe: "Recipe"):
+        if recipe not in self.liked_recipes:
+            self.liked_recipes.append(recipe)
+
+
+def build_user_profile() -> User:
+    name = input("Enter your name: ").strip()
+
+    print("Enter dietary restrictions one at a time (blank line when done):")
+    dietary_restrictions = []
+    while (val := input("  > ").strip()):
+        dietary_restrictions.append(val)
+
+    print("Enter preferred cuisines one at a time (blank line when done):")
+    preferred_cuisines = []
+    while (val := input("  > ").strip()):
+        preferred_cuisines.append(val)
+
+    print("Enter disliked ingredients one at a time (blank line when done):")
+    disliked_ingredients = []
+    while (val := input("  > ").strip()):
+        disliked_ingredients.append(val)
+
+    print("Enter liked ingredients one at a time (blank line when done):")
+    liked_ingredients = []
+    while (val := input("  > ").strip()):
+        liked_ingredients.append(val)
+
+    return User(name, dietary_restrictions, preferred_cuisines, disliked_ingredients, liked_ingredients)
+
+
 class Review:
     # TODO: figure out how to fetch the likes/tags (API call?)
     rating: int
