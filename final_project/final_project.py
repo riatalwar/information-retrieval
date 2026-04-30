@@ -1,5 +1,6 @@
 import sys
 import time
+import os
 import requests
 from recipe_scrapers import scrape_html
 from typing import List
@@ -7,14 +8,25 @@ from urllib.parse import urlencode
 from bs4 import BeautifulSoup
 import cloudscraper
 from playwright.sync_api import sync_playwright
+import google.generativeai as genai
 
 
 SEARCH_URL = "https://www.allrecipes.com/search?"
 scraper = cloudscraper.create_scraper()
+gemini_api_key = os.environ["GEMINI_API_KEY"]
+genai.configure(api_key=gemini_api_key)
+model = genai.GenerativeModel(
+    model_name="gemini-2.5-flash",
+    system_instruction=(
+        "You convert verbose recipe descriptions into short, effective Allrecipes search queries. "
+        "Return ONLY the search query — no explanation, no quotes, no punctuation at the end. "
+        "Keep it under 8 words. Focus on the core dish type, main ingredient, and one or two"
+        "key attributes (e.g. 'creamy chicken pasta', 'easy weeknight beef stew', '30 minute lemon salmon')."
+    )
+)
 
 
 class Review:
-    # TODO: figure out how to fetch the likes/tags (API call?)
     rating: int
     comment: str
     helpful: int
@@ -200,7 +212,8 @@ def read_queries_doc(file) -> List[str]:
     queries = []
     with open(file) as f:
         for line in f:
-            queries.append(line)
+            response = model.generate_content(line)
+            queries.append(response.text.strip())
     return queries
 
 
