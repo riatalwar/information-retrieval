@@ -1,4 +1,3 @@
-import json
 import sys
 import time
 import requests
@@ -7,6 +6,7 @@ from typing import List
 from urllib.parse import urlencode
 from bs4 import BeautifulSoup
 import cloudscraper
+from playwright.sync_api import sync_playwright
 
 
 SEARCH_URL = "https://www.allrecipes.com/search?"
@@ -17,12 +17,15 @@ class Review:
     # TODO: figure out how to fetch the likes/tags (API call?)
     rating: int
     comment: str
-    likes: int
-    tags: List[str]
+    helpful: int
     
-    def __init__(self, rating: int, comment: str):
+    def __init__(self, rating: int, comment: str, helpful: int):
         self.rating = rating
         self.comment = comment
+        self.helpful = helpful
+
+    def __str__(self):
+        return str(self.rating) + " stars\t\t" + self.helpful + " found this review helpful\n" + self.comment + "\n"
 
 
 class Recipe:
@@ -52,12 +55,11 @@ class Recipe:
         self.url = url
         self.reviews = reviews
 
-
-    def repr(self) -> str:
-        return (f"title: {self.title}\n" +
-            f"  author: {self.author}\n" +
-            f"  {self.desc}\n" +
-            f"  link: {self.url}")
+    def __str__(self) -> str:
+        output = self.title + " by " + self.author + "\n"
+        for r in self.reviews:
+            output += str(r)
+        return output
 
 
 def read_query(query: str):
@@ -76,30 +78,64 @@ def rank_recipe():
     pass
 
 
+def load_page_html(url: str) -> str:
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"])
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 720},
+        )
+        page = context.new_page()
+        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+        page.goto(url)
+
+        # scroll so reviews are loaded
+        for i in range(20):
+            page.evaluate(f"window.scrollTo(0, {1500 * i})")
+            page.wait_for_timeout(1)
+
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    
+        # get page with reviews loaded
+        html = page.content()
+        browser.close()
+    return html
+
+
 def parse_reviews(text: str, ct: int) -> List[Review]:
     soup = BeautifulSoup(text, "html.parser")
+
     i = 0
     fetched_reviews = []
-    for script_tag in soup.find_all("script", id="allrecipes-schema_1-0"):
-        try:
-            data = json.loads(script_tag.string)[0]
-            reviews = data.get("review", [])
-            if reviews:
-                for review in reviews:
-                    r = Review(
-                        review["reviewRating"]["ratingValue"], 
-                        review["reviewBody"])
-                    fetched_reviews.append(r)
-                    i += 1
-                    if i >= ct: return
-        except Exception:
+
+    reviews = soup.find_all(class_="mm-recipes-ugc-shared-item-card--review")
+    for r in reviews:
+        # skip the reviews that show up in the featured reviews section to avoid duplication
+        if r.find_parent(class_="mm-recipes-ugc-threaded-add-feedback__most-helpful"):
             continue
+
+        body = r.find(class_="mm-recipes-ugc-shared-item-card__text").text.strip()
+        helpful_ct = r.find(class_="mm-recipes-ugc-shared-helpful-button").text.strip()
+        stars = r.find(class_="mm-recipes-ugc-shared-star-rating")
+        rating = len([
+            use for use in stars.find_all("use")
+            # only get filled stars, ignore the empty ones
+            if use.get("xlink:href") == "#ugc-shared-icon-star"
+        ]) if stars else None
+
+        review = Review(rating, body, helpful_ct)
+        fetched_reviews.append(review)
+        i += 1
+        if i >= ct: return fetched_reviews
     return fetched_reviews
 
 
 def scrape_page(url: str) -> Recipe:
     # fetch page html
-    html = scraper.get(url).text
+    html = load_page_html(url)
     reviews = parse_reviews(html, 5) # placeholder, find first 5 reviews
 
     recipe_scraper = scrape_html(html, url)
@@ -160,17 +196,24 @@ def find_recipes(query: str, ct: int) -> List[Recipe]:
     return recipes
 
 
-def read_queries_doc(file):
+def read_queries_doc(file) -> List[str]:
+    queries = []
     with open(file) as f:
-        content = f.read()
-        return content
+        for line in f:
+            queries.append(line)
+    return queries
 
 
 def main():
     profile = sys.argv[1]
-    query = sys.argv[2]
-    words = read_queries_doc(query)
-    recipes = find_recipes(words, 8)
+    query_file = sys.argv[2]
+    queries = read_queries_doc(query_file)
+    for q in queries:
+        print("Processing query")
+        recipes = find_recipes(q, 3) # find the first 3 recipes 
+        print("Recipes found: ")
+        for r in recipes:
+            print(r)
 
 
 if __name__ == '__main__':
