@@ -6,11 +6,14 @@ from typing import List
 from urllib.parse import urlencode
 from bs4 import BeautifulSoup
 import cloudscraper
+import numpy as np
+from sentence_transformers import SentenceTransformer
 from playwright.sync_api import sync_playwright
 
 
 SEARCH_URL = "https://www.allrecipes.com/search?"
 scraper = cloudscraper.create_scraper()
+_encoder = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 class User:
@@ -106,6 +109,7 @@ class Recipe:
 
     def __str__(self) -> str:
         output = self.title + " by " + self.author + "\n"
+        output += str(self.ingredients) + '\n'
         for r in self.reviews:
             output += str(r)
         return output
@@ -122,9 +126,42 @@ def read_profile(profile: str):
     pass
 
 
-def rank_recipe():
-    # given a recipe from allrecipes, rank with similarity to query and profile
-    pass
+def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3) -> List["Recipe"]:
+    def has_disliked(recipe: "Recipe") -> bool:
+        ingredients_text = " ".join(recipe.ingredients).lower()
+        return any(d.lower() in ingredients_text for d in user.disliked_ingredients)
+
+    filtered = [r for r in recipes if not has_disliked(r)]
+    if not filtered:
+        return []
+
+    def recipe_text(recipe: "Recipe") -> str:
+        parts = [recipe.title or "", recipe.desc or "", " ".join(recipe.ingredients), recipe.cuisine or ""]
+        return " ".join(p for p in parts if p)
+
+    query_emb = _encoder.encode(query, convert_to_numpy=True)
+    recipe_embs = _encoder.encode([recipe_text(r) for r in filtered], convert_to_numpy=True)
+
+    query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-10)
+    recipe_norms = recipe_embs / (np.linalg.norm(recipe_embs, axis=1, keepdims=True) + 1e-10)
+    scores = (recipe_norms @ query_norm).tolist()
+
+    INGREDIENT_BOOST = 0.05
+    CUISINE_BOOST = 0.10
+
+    for i, recipe in enumerate(filtered):
+        ingredients_text = " ".join(recipe.ingredients).lower()
+        for liked in user.liked_ingredients:
+            if liked.lower() in ingredients_text:
+                scores[i] += INGREDIENT_BOOST
+        if recipe.cuisine:
+            cuisine_lower = recipe.cuisine.lower()
+            for pref in user.preferred_cuisines:
+                if pref.lower() in cuisine_lower or cuisine_lower in pref.lower():
+                    scores[i] += CUISINE_BOOST
+
+    ranked = sorted(zip(scores, filtered), key=lambda x: x[0], reverse=True)
+    return [r for _, r in ranked][:count]
 
 
 def load_page_html(url: str) -> str:
@@ -258,10 +295,11 @@ def main():
     query_file = sys.argv[1]
     queries = read_queries_doc(query_file)
     for q in queries:
-        print("Processing query")
-        recipes = find_recipes(q, 3) # find the first 3 recipes 
-        print("Recipes found: ")
-        for r in recipes:
+        print("Processing query:", q.strip())
+        recipes = find_recipes(q, 10)
+        ranked = rank_recipes(q, recipes, profile)
+        print(f"Results ({len(ranked)} after filtering):")
+        for r in ranked:
             print(r)
 
 
