@@ -1,5 +1,6 @@
 import sys
 import time
+import os
 import requests
 from recipe_scrapers import scrape_html
 from typing import List
@@ -9,11 +10,17 @@ import cloudscraper
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from playwright.sync_api import sync_playwright
+from google import genai
+from google.genai import types
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 SEARCH_URL = "https://www.allrecipes.com/search?"
 scraper = cloudscraper.create_scraper()
 _encoder = SentenceTransformer("all-MiniLM-L6-v2")
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+local = threading.local()
 
 
 class User:
@@ -66,7 +73,6 @@ def build_user_profile() -> User:
 
 
 class Review:
-    # TODO: figure out how to fetch the likes/tags (API call?)
     rating: int
     comment: str
     helpful: int
@@ -115,17 +121,6 @@ class Recipe:
         return output
 
 
-def read_query(query: str):
-    words = query.strip().split(' ')
-    # do any preprocessing, get rid of filler words?
-    return words
-
-
-def read_profile(profile: str):
-    # get user profile
-    pass
-
-
 def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3) -> List["Recipe"]:
     def has_disliked(recipe: "Recipe") -> bool:
         ingredients_text = " ".join(recipe.ingredients).lower()
@@ -164,30 +159,41 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3
     return [r for _, r in ranked][:count]
 
 
-def load_page_html(url: str) -> str:
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
+def get_page():
+    if not hasattr(local, "playwright"):
+    # create playwright instance if not there
+        local.playwright = sync_playwright().start()
+        local.browser = local.playwright.chromium.launch(
             headless=True,
             args=["--disable-blink-features=AutomationControlled"])
-        context = browser.new_context(
+        local.context = local.browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 720},
-        )
-        page = context.new_page()
+            viewport={"width": 1280, "height": 720},)
+    return local.context.new_page()
+
+
+def load_page_html(url: str) -> str:
+    page = get_page()
+    try:
         page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-
-        page.goto(url)
-
+        page.goto(url, wait_until="domcontentloaded")
         # scroll so reviews are loaded
         for i in range(20):
             page.evaluate(f"window.scrollTo(0, {1500 * i})")
             page.wait_for_timeout(1)
-
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
     
+        try:
+            page.wait_for_selector(
+                ".mm-recipes-ugc-shared-item-card--review",
+                timeout=8000
+            )
+        except:
+            pass
+        
         # get page with reviews loaded
         html = page.content()
-        browser.close()
+    finally:
+        page.close()
     return html
 
 
@@ -271,14 +277,19 @@ def find_recipes(query: str, ct: int) -> List[Recipe]:
         if not href or href in links:
             continue
         try:
-            recipe = scrape_page(href)
-            recipes.append(recipe)
             links.append(href)
         except Exception:
             continue
         i += 1
         if i >= ct: break
 
+    with ThreadPoolExecutor(max_workers=3) as thread_ex:
+        futures = {thread_ex.submit(scrape_page, l): l for l in links}
+        for f in as_completed(futures):
+            try:
+                recipes.append(f.result())
+            except Exception as e:
+                pass
     return recipes
 
 
@@ -286,7 +297,19 @@ def read_queries_doc(file) -> List[str]:
     queries = []
     with open(file) as f:
         for line in f:
-            queries.append(line)
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                config=types.GenerateContentConfig(
+                    system_instruction=(
+                        "Convert recipe descriptions into short Allrecipes search queries. "
+                        "Return only the search query — no explanation, no quotes, no punctuation at the end. "
+                        "Keep it under 8 words. Focus on the core dish type, main ingredient, and one or two "
+                        "key attributes (e.g. 'creamy chicken pasta', 'easy weeknight beef stew', '30 minute lemon salmon')."
+                    )
+                ),
+                contents=line.strip(),
+            )
+            queries.append(response.text.strip())
     return queries
 
 
