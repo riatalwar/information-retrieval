@@ -13,6 +13,7 @@ from sentence_transformers import SentenceTransformer
 from playwright.sync_api import sync_playwright
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -124,12 +125,45 @@ class Recipe:
         return output
 
 
+class DietaryViolationBatch(BaseModel):
+    violations: List[bool]
+
+
+def check_dietary_restrictions(recipes: List["Recipe"], restrictions: List[str]) -> List[bool]:
+    restrictions_str = ", ".join(restrictions)
+    recipes_str = "\n\n".join(
+        f"Recipe {i + 1}:\n" + "\n".join(r.ingredients)
+        for i, r in enumerate(recipes)
+    )
+    prompt = (
+        f"Dietary restrictions: {restrictions_str}\n\n"
+        f"{recipes_str}\n\n"
+        f"For each of the {len(recipes)} recipes above (in order), does it violate "
+        "any of the listed dietary restrictions?"
+    )
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=DietaryViolationBatch,
+        ),
+    )
+    return response.parsed.violations
+
+
 def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3) -> List["Recipe"]:
     def has_disliked(recipe: "Recipe") -> bool:
         ingredients_text = " ".join(recipe.ingredients).lower()
         return any(d.lower() in ingredients_text for d in user.disliked_ingredients)
 
     filtered = [r for r in recipes if not has_disliked(r)]
+    if not filtered:
+        return []
+
+    if user.dietary_restrictions:
+        violations = check_dietary_restrictions(filtered, user.dietary_restrictions)
+        filtered = [r for r, violates in zip(filtered, violations) if not violates]
     if not filtered:
         return []
 
