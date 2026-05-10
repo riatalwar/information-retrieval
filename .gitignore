@@ -16,3 +16,5 @@ hw4/links.txt
 hw4/nonlocal.txt
 hw4/visited.txt
 hw4/extracted.txt
+
+*/.env
