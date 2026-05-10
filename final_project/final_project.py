@@ -51,22 +51,22 @@ def build_user_profile() -> User:
 
     print("Enter dietary restrictions one at a time (blank line when done):")
     dietary_restrictions = []
-    while (val := input("  > ").strip()):
+    while (val := input("  > ").strip().lower()):
         dietary_restrictions.append(val)
 
     print("Enter preferred cuisines one at a time (blank line when done):")
     preferred_cuisines = []
-    while (val := input("  > ").strip()):
+    while (val := input("  > ").strip().lower()):
         preferred_cuisines.append(val)
 
     print("Enter disliked ingredients one at a time (blank line when done):")
     disliked_ingredients = []
-    while (val := input("  > ").strip()):
+    while (val := input("  > ").strip().lower()):
         disliked_ingredients.append(val)
 
     print("Enter liked ingredients one at a time (blank line when done):")
     liked_ingredients = []
-    while (val := input("  > ").strip()):
+    while (val := input("  > ").strip().lower()):
         liked_ingredients.append(val)
 
     return User(name, dietary_restrictions, preferred_cuisines, disliked_ingredients, liked_ingredients)
