@@ -1,6 +1,7 @@
 import sys
 import time
 import os
+from dotenv import load_dotenv
 import requests
 from recipe_scrapers import scrape_html
 from typing import List
@@ -15,6 +16,8 @@ from google.genai import types
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
+load_dotenv()
 
 SEARCH_URL = "https://www.allrecipes.com/search?"
 scraper = cloudscraper.create_scraper()
@@ -141,10 +144,38 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3
     recipe_norms = recipe_embs / (np.linalg.norm(recipe_embs, axis=1, keepdims=True) + 1e-10)
     scores = (recipe_norms @ query_norm).tolist()
 
+    # Encode all review comments in one batch for efficiency
+    all_comments = []
+    review_spans = []  # (start, end) index into all_comments for each recipe
+    for recipe in filtered:
+        comments = [rv.comment for rv in recipe.reviews if rv.comment]
+        start = len(all_comments)
+        all_comments.extend(comments)
+        review_spans.append((start, start + len(comments)))
+
+    if all_comments:
+        comment_embs = _encoder.encode(all_comments, convert_to_numpy=True)
+        comment_norms = comment_embs / (np.linalg.norm(comment_embs, axis=1, keepdims=True) + 1e-10)
+        comment_sims = comment_norms @ query_norm
+    else:
+        comment_sims = np.array([])
+
+    REVIEW_SIM_WEIGHT = 0.20   # avg review-query similarity contribution
+    RATING_SCALE = 20.0        # maps rating 1-5 → +/-0.10 around the neutral point of 3
     INGREDIENT_BOOST = 0.05
     CUISINE_BOOST = 0.10
 
     for i, recipe in enumerate(filtered):
+        # Review semantic similarity: avg cosine sim of review comments to query
+        start, end = review_spans[i]
+        if end > start:
+            scores[i] += REVIEW_SIM_WEIGHT * float(np.mean(comment_sims[start:end]))
+
+        # Rating boost/penalty: 5 → +0.10, 3 → 0, 1 → -0.10
+        if recipe.rating is not None:
+            scores[i] += (recipe.rating - 3) / RATING_SCALE
+
+        # Liked ingredients and preferred cuisine boosts
         ingredients_text = " ".join(recipe.ingredients).lower()
         for liked in user.liked_ingredients:
             if liked.lower() in ingredients_text:
