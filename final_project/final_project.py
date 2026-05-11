@@ -153,7 +153,7 @@ def check_dietary_restrictions(recipes: List["Recipe"], restrictions: List[str])
     return response.parsed.violations
 
 
-def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List["Recipe"]:
+def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List[tuple["Recipe", float]]:
     filtered = list(recipes)
     if not filtered:
         return []
@@ -203,11 +203,11 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List["Recip
         comment_sims = np.array([])
         all_weights = np.array([])
 
-    REVIEW_SIM_WEIGHT = 2.0   # avg review-query similarity contribution
-    REVIEW_RATING_WEIGHT = 5.0
-    RATING_SCALE = 20.0        # maps rating 1-5 → +/-0.10 around the neutral point of 3
-    INGREDIENT_BOOST = 0.05
-    INGREDIENT_PENALTY = 0.05
+    REVIEW_SIM_WEIGHT = 1.0   
+    REVIEW_RATING_WEIGHT = 3.0
+    RATING_SCALE = 20.0     
+    INGREDIENT_BOOST = 1.0
+    INGREDIENT_PENALTY = 1.0
     CUISINE_BOOST = 0.10
 
     for i, recipe in enumerate(filtered):
@@ -258,7 +258,7 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List["Recip
                     scores[i] += CUISINE_BOOST
 
     ranked = sorted(zip(scores, filtered), key=lambda x: x[0], reverse=True)
-    return [r for _, r in ranked]
+    return [(recipe, round(score, 3)) for score, recipe in ranked]
 
 
 def get_page():
@@ -428,8 +428,8 @@ def main():
         recipes = find_recipes(q, 10)
         ranked = rank_recipes(q, recipes, profile)
         print(f"Results ({len(ranked)} recipes):")
-        for r in ranked:
-            print(r)
+        for r, s in ranked:
+            print(str(r) + "\nScore: " + str(s))
 
 
 if __name__ == '__main__':

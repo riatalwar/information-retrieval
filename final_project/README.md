@@ -17,41 +17,76 @@ preferred cuisines: none
 disliked ingredients: garlic 
 liked ingredients: cheese, mushrooms
 
-The LLM shortens this query to "creamy cheesy vegetable pasta", so we searched for this in Allrecipes, and ranked the first 10 recipes based on our own judgement:
+The LLM shortens this query to "creamy cheesy vegetable pasta", so we searched for this in Allrecipes, and ranked the first 7 recipes based on our own judgement:
 
 1. Stuffed Shells
-2. Stick of Butter Mississippi Chicken Spaghetti
-3. Quick and Easy Chicken Spaghetti
-4. Cheesy Polenta
+2. Ground Beef Casserole
+3. Butternut Squash Mac and Cheese
+4. Easy Slow Cooker Tuna Casserole
+5. Cheesy Sausage Pasta
+6. Quick and Easy Chicken Spaghetti
+7. My Mother-in-Law's Cheese Sauce...ssshh Don't Tell Her
 
-Excluded due to presence of garlic:
-1. Butternut Squash Mac and Cheese 
-2. Italian Wedding Pasta Bake 
-3. Ground Beef Casserole 
-4. Cheesy Sausage Pasta 
-5. Cheesy Kielbasa Pasta 
-6. Easy Slow Cooker Tuna Casserole 
 
-We started by weighing reviews, rating, ingredients, and cuisine equally, but we realized that this was weighing the reviews too heavily, which was a problem, especially since some of the longer and more detailed reviews were ones with lower ratings.
-The returned results:
-1. Quick and Easy Chicken Spaghetti
-2. Stuffed Shells
-3. Cheesy Polenta
-4. Stick of Butter Mississippi Chicken Spaghetti
+We started off with equal weights for reviews, ratings, liked/disliked ingredients, and preferred cusine:
 
-We then shifted the weight of the reviews to 2, the weight of ratings to 20.0, the weight of ingredients in the liked ingredients list to 0.05, and the weight of same cuisine stayed at 1, as we discovered that many recipes did not have a cuisine. The reviews were also individually weighted by the number of helpful votes they had, which we thought would be useful since a review with a higher helpful count means that more people agreed with its content. Furthermore, the reviews' ratings were taken into account, as a recipe with many recent low ratings is often less desirable. The one recipe that was in a position we did not anticipate was the "Stick of Butter Mississippi Chicken Spaghetti", which most likely was due to the fact that its reviews were very short and concise (eg "Delicious!"), resulting in a lower similarity with the query itself.
+1. Stuffed Shells -- Score: 5.24
+2. Easy Slow Cooker Tuna Casserole -- Score: 4.84 (g)
+3. Quick and Easy Chicken Spaghetti -- Score: 4.536
+4. Ground Beef Casserole -- Score: 4.058 (g)
+5. Butternut Squash Mac and Cheese -- Score: 3.43 (g)
+6. Cheesy Sausage Pasta -- Score: 3.334 (g)
+7. My Mother-in-Law's Cheese Sauce...ssshh Don't Tell Her -- Score: 2.165 (g)
 
-The new returned results:
-1. Quick and Easy Chicken Spaghetti
-2. Cheesy Polenta
-3. Stuffed Shells
-4. Stick of Butter Mississippi Chicken Spaghetti
+The rankings were somewhat similar to our own rankings, although it seemed that a few recipes with many recent negative reviews or a lower rating were ranking higher, despite the chicken spaghetti recipe fell to the bottom due to it's very low recent review ratings.
+There was a cheese sauce recipe, but it was ranked lower in the list, which was expected as it is not as relevant.
 
-We discovered here that while we did add review rating into the weight, it was still being overshadowed by similarity between review content and the query, so we decided to separate the weight of the review similarity and review rating so that the similarity was weighted 2 and the review rating was weighted 5:
+We then adjusted the weights of each of the categories:  
+REVIEW_SIM_WEIGHT = 1.0   
+REVIEW_RATING_WEIGHT = 5.0  
+RATING_SCALE = 20.0        
+INGREDIENT_BOOST = 0.05  
+INGREDIENT_PENALTY = 0.05  
+CUISINE_BOOST = 0.10  
 
-1. Stuffed Shells
-2. Quick and Easy Chicken Spaghetti
-3. Stick of Butter Mississippi Chicken Spaghetti
-4. Cheesy Polenta
+1. Easy Slow Cooker Tuna Casserole -- Score: 5.99
+2. Butternut Squash Mac and Cheese -- Score: 5.91
+3. Stuffed Shells -- Score: 5.448
+4. Cheesy Sausage Pasta -- Score: 5.342
+5. Ground Beef Casserole -- Score: 5.151
+6. My Mother-in-Law's Cheese Sauce...ssshh Don't Tell Her -- Score: 3.455 
+7. Quick and Easy Chicken Spaghetti -- Score: 1.642  
 
-The above results were much closer to our initial ranking.
+We realized here that although recipes with lower ratings were being penalized, recipes with disliked ingredients (marked with a g) were being weighted too highly due to other factors such as reviews or ratings, so we then decided to increase the penalty of a disliked ingredient:  
+
+REVIEW_SIM_WEIGHT = 1.0   
+REVIEW_RATING_WEIGHT = 5.0  
+RATING_SCALE = 20.0       
+INGREDIENT_BOOST = 0.05  
+INGREDIENT_PENALTY = 1.0  
+CUISINE_BOOST = 0.10    
+
+1. Stuffed Shells by Renee -- Score: 5.448
+2. Easy Slow Cooker Tuna Casserole -- Score: 5.04
+3. Butternut Squash Mac and Cheese -- Score: 4.96
+4. Cheesy Sausage Pasta -- Score: 4.392
+5. Ground Beef Casserole -- Score: 4.201
+6. My Mother-in-Law's Cheese Sauce...ssshh Don't Tell Her -- Score: 2.505 g
+7. Quick and Easy Chicken Spaghetti -- Score: 1.642  
+
+These results overall matched our own rankings the best, although the chicken spaghetti recipe was being penalized too harshly due to recent reviews, so we decreased the weight of review ratings:  
+
+REVIEW_SIM_WEIGHT = 1.0   
+REVIEW_RATING_WEIGHT = 3.0  
+RATING_SCALE = 20.0      
+INGREDIENT_BOOST = 1.0  
+INGREDIENT_PENALTY = 1.0  
+CUISINE_BOOST = 0.10
+
+1. Stuffed Shells -- Score: 5.534
+2. Easy Slow Cooker Tuna Casserole -- Score: 4.94
+3. Ground Beef Casserole -- Score: 4.415
+4. Butternut Squash Mac and Cheese -- Score: 3.91
+5. Cheesy Sausage Pasta -- Score: 3.626
+6. Quick and Easy Chicken Spaghetti -- Score: 3.279
+7. My Mother-in-Law's Cheese Sauce...ssshh Don't Tell Her -- Score: 2.335
