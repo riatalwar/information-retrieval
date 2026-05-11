@@ -119,10 +119,10 @@ class Recipe:
         self.reviews = reviews
 
     def __str__(self) -> str:
-        output = self.title + " by " + self.author + "\n"
-        output += str(self.ingredients) + '\n'
-        for r in self.reviews:
-            output += str(r)
+        output = f'{self.title} by {self.author}\nLink: {self.url}\nIngredients:\n"'
+
+        for i in self.ingredients:
+            output += str(i) + '\n'
         return output
 
 
@@ -154,11 +154,7 @@ def check_dietary_restrictions(recipes: List["Recipe"], restrictions: List[str])
 
 
 def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List["Recipe"]:
-    def has_disliked(recipe: "Recipe") -> bool:
-        ingredients_text = " ".join(recipe.ingredients).lower()
-        return any(d.lower() in ingredients_text for d in user.disliked_ingredients)
-
-    filtered = [r for r in recipes if not has_disliked(r)]
+    filtered = list(recipes)
     if not filtered:
         return []
 
@@ -211,6 +207,7 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List["Recip
     REVIEW_RATING_WEIGHT = 5.0
     RATING_SCALE = 20.0        # maps rating 1-5 → +/-0.10 around the neutral point of 3
     INGREDIENT_BOOST = 0.05
+    INGREDIENT_PENALTY = 0.05
     CUISINE_BOOST = 0.10
 
     for i, recipe in enumerate(filtered):
@@ -246,11 +243,14 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List["Recip
         if recipe.rating is not None:
             scores[i] += (recipe.rating - 3) / RATING_SCALE
 
-        # Liked ingredients and preferred cuisine boosts
+        # Liked/disliked ingredient boosts and penalties
         ingredients_text = " ".join(recipe.ingredients).lower()
         for liked in user.liked_ingredients:
             if liked.lower() in ingredients_text:
                 scores[i] += INGREDIENT_BOOST
+        for disliked in user.disliked_ingredients:
+            if disliked.lower() in ingredients_text:
+                scores[i] -= INGREDIENT_PENALTY
         if recipe.cuisine:
             cuisine_lower = recipe.cuisine.lower()
             for pref in user.preferred_cuisines:
@@ -427,7 +427,7 @@ def main():
         print("Processing query:", q.strip())
         recipes = find_recipes(q, 10)
         ranked = rank_recipes(q, recipes, profile)
-        print(f"Results ({len(ranked)} after filtering):")
+        print(f"Results ({len(ranked)} recipes):")
         for r in ranked:
             print(r)
 
