@@ -15,6 +15,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 import threading
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -87,7 +88,7 @@ class Review:
         self.helpful = helpful
 
     def __str__(self):
-        return str(self.rating) + " stars\t\t" + self.helpful + " found this review helpful\n" + self.comment + "\n"
+        return str(self.rating) + " stars\t\t" + str(self.helpful) + " found this review helpful\n" + self.comment + "\n"
 
 
 class Recipe:
@@ -142,7 +143,7 @@ def check_dietary_restrictions(recipes: List["Recipe"], restrictions: List[str])
         "any of the listed dietary restrictions?"
     )
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -152,7 +153,7 @@ def check_dietary_restrictions(recipes: List["Recipe"], restrictions: List[str])
     return response.parsed.violations
 
 
-def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3) -> List["Recipe"]:
+def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List["Recipe"]:
     def has_disliked(recipe: "Recipe") -> bool:
         ingredients_text = " ".join(recipe.ingredients).lower()
         return any(d.lower() in ingredients_text for d in user.disliked_ingredients)
@@ -178,23 +179,36 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3
     recipe_norms = recipe_embs / (np.linalg.norm(recipe_embs, axis=1, keepdims=True) + 1e-10)
     scores = (recipe_norms @ query_norm).tolist()
 
-    # Encode all review comments in one batch for efficiency
+    # Encode all review comments in one batch
     all_comments = []
-    review_spans = []  # (start, end) index into all_comments for each recipe
+    all_weights = []
+    review_spans = []
+
     for recipe in filtered:
-        comments = [rv.comment for rv in recipe.reviews if rv.comment]
+        recipe_reviews = [rv for rv in recipe.reviews if rv.comment]
         start = len(all_comments)
-        all_comments.extend(comments)
-        review_spans.append((start, start + len(comments)))
+
+        for rv in recipe_reviews:
+            all_comments.append(rv.comment)
+            rating_factor = (rv.rating or 3) / 5
+            weight = np.log1p(rv.helpful + 1) * rating_factor
+            all_weights.append(weight)
+
+        review_spans.append((start, len(all_comments)))
 
     if all_comments:
         comment_embs = _encoder.encode(all_comments, convert_to_numpy=True)
-        comment_norms = comment_embs / (np.linalg.norm(comment_embs, axis=1, keepdims=True) + 1e-10)
+        comment_norms = comment_embs / (
+            np.linalg.norm(comment_embs, axis=1, keepdims=True) + 1e-10
+        )
         comment_sims = comment_norms @ query_norm
+        all_weights = np.array(all_weights)
     else:
         comment_sims = np.array([])
+        all_weights = np.array([])
 
-    REVIEW_SIM_WEIGHT = 0.20   # avg review-query similarity contribution
+    REVIEW_SIM_WEIGHT = 2.0   # avg review-query similarity contribution
+    REVIEW_RATING_WEIGHT = 5.0
     RATING_SCALE = 20.0        # maps rating 1-5 → +/-0.10 around the neutral point of 3
     INGREDIENT_BOOST = 0.05
     CUISINE_BOOST = 0.10
@@ -203,7 +217,30 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3
         # Review semantic similarity: avg cosine sim of review comments to query
         start, end = review_spans[i]
         if end > start:
-            scores[i] += REVIEW_SIM_WEIGHT * float(np.mean(comment_sims[start:end]))
+            if end > start:
+                sims = comment_sims[start:end]
+                weights = all_weights[start:end]
+                weighted_sim = np.average(sims, weights=weights)
+                scores[i] += REVIEW_SIM_WEIGHT * float(weighted_sim)
+
+        review_ratings = []
+        rating_weights = []
+
+        for rv in recipe.reviews:
+            if rv.rating is not None:
+                review_ratings.append(rv.rating)
+
+                weight = np.log1p(rv.helpful + 1)
+                rating_weights.append(weight)
+
+        if review_ratings:
+            weighted_review_rating = np.average(
+                review_ratings,
+                weights=rating_weights
+            )
+
+        normalized_rating = (weighted_review_rating - 3) / 2
+        scores[i] += REVIEW_RATING_WEIGHT * normalized_rating
 
         # Rating boost/penalty: 5 → +0.10, 3 → 0, 1 → -0.10
         if recipe.rating is not None:
@@ -221,7 +258,7 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User, count: int = 3
                     scores[i] += CUISINE_BOOST
 
     ranked = sorted(zip(scores, filtered), key=lambda x: x[0], reverse=True)
-    return [r for _, r in ranked][:count]
+    return [r for _, r in ranked]
 
 
 def get_page():
@@ -254,7 +291,7 @@ def load_page_html(url: str) -> str:
             )
         except:
             pass
-        
+
         # get page with reviews loaded
         html = page.content()
     finally:
@@ -273,9 +310,13 @@ def parse_reviews(text: str, ct: int) -> List[Review]:
         # skip the reviews that show up in the featured reviews section to avoid duplication
         if r.find_parent(class_="mm-recipes-ugc-threaded-add-feedback__most-helpful"):
             continue
+        if r.find_parent(class_="mm-recipes-ugc-threaded-carousel__cards"):
+            continue
 
         body = r.find(class_="mm-recipes-ugc-shared-item-card__text").text.strip()
-        helpful_ct = r.find(class_="mm-recipes-ugc-shared-helpful-button").text.strip()
+        helpful_text = r.find(class_="mm-recipes-ugc-shared-helpful-button").text.strip()
+        match = re.search(r"\d+", helpful_text.replace(",", ""))
+        helpful_ct = int(match.group()) if match else 0
         stars = r.find(class_="mm-recipes-ugc-shared-star-rating")
         rating = len([
             use for use in stars.find_all("use")
@@ -293,7 +334,7 @@ def parse_reviews(text: str, ct: int) -> List[Review]:
 def scrape_page(url: str) -> Recipe:
     # fetch page html
     html = load_page_html(url)
-    reviews = parse_reviews(html, 5) # placeholder, find first 5 reviews
+    reviews = parse_reviews(html, 10)
 
     recipe_scraper = scrape_html(html, url)
     return Recipe(
