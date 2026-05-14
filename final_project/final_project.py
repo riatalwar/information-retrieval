@@ -140,7 +140,7 @@ def check_dietary_restrictions(recipes: List["Recipe"], restrictions: List[str])
         f"Dietary restrictions: {restrictions_str}\n\n"
         f"{recipes_str}\n\n"
         f"For each of the {len(recipes)} recipes above (in order), does it violate "
-        "any of the listed dietary restrictions?"
+        "any of the listed dietary restrictions, if there are any?"
     )
     response = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -208,7 +208,7 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List[tuple[
     RATING_SCALE = 20.0     
     INGREDIENT_BOOST = 1.0
     INGREDIENT_PENALTY = 1.0
-    CUISINE_BOOST = 0.10
+    CUISINE_BOOST = 0.50
 
     for i, recipe in enumerate(filtered):
         # Review semantic similarity: avg cosine sim of review comments to query
@@ -239,7 +239,7 @@ def rank_recipes(query: str, recipes: List["Recipe"], user: User) -> List[tuple[
         normalized_rating = (weighted_review_rating - 3) / 2
         scores[i] += REVIEW_RATING_WEIGHT * normalized_rating
 
-        # Rating boost/penalty: 5 → +0.10, 3 → 0, 1 → -0.10
+        # Rating boost/penalty
         if recipe.rating is not None:
             scores[i] += (recipe.rating - 3) / RATING_SCALE
 
@@ -356,7 +356,6 @@ def find_recipes(query: str, ct: int) -> List[Recipe]:
     # search for a recipe on allrecipes
     params = { "q": query }
 
-    # pretend to be a real user 
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
@@ -429,7 +428,7 @@ def main():
         ranked = rank_recipes(q, recipes, profile)
         print(f"Results ({len(ranked)} recipes):")
         for r, s in ranked:
-            print(str(r) + "\nScore: " + str(s))
+            print(str(r) + "Score: " + str(s) + "\n")
 
 
 if __name__ == '__main__':
